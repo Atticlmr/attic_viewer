@@ -1,0 +1,227 @@
+/**
+ * Mesh file loading utility
+ * Unified management of STL, OBJ, DAE, GLTF and other format loading
+ */
+import * as THREE from 'three';
+
+// Cache loaders for performance
+let loadersCache = null;
+
+/**
+ * Get or create loaders instance (singleton pattern)
+ */
+async function getLoaders() {
+    if (!loadersCache) {
+        const [
+            { STLLoader },
+            { OBJLoader },
+            { MTLLoader },
+            { ColladaLoader },
+            { GLTFLoader }
+        ] = await Promise.all([
+            import('three/examples/jsm/loaders/STLLoader.js'),
+            import('three/examples/jsm/loaders/OBJLoader.js'),
+            import('three/examples/jsm/loaders/MTLLoader.js'),
+            import('three/examples/jsm/loaders/ColladaLoader.js'),
+            import('three/examples/jsm/loaders/GLTFLoader.js')
+        ]);
+        loadersCache = {
+            STLLoader: new STLLoader(),
+            OBJLoader: new OBJLoader(),
+            MTLLoader: new MTLLoader(),
+            ColladaLoader: new ColladaLoader(),
+            GLTFLoader: new GLTFLoader()
+        };
+    }
+    return loadersCache;
+}
+
+/**
+ * Normalize path
+ */
+function normalizePath(path) {
+    if (!path) return '';
+    return path.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+/g, '/');
+}
+
+/**
+ * Load single mesh file
+ * @param {string} meshPath - Mesh file path
+ * @param {Map} fileMap - File map
+ * @returns {Promise<THREE.BufferGeometry|THREE.Group|null>}
+ */
+export async function loadMeshFile(meshPath, fileMap) {
+    try {
+        const normalizedPath = normalizePath(meshPath);
+        const fileNameOnly = normalizedPath.split('/').pop();
+        const baseName = fileNameOnly.split('.').slice(0, -1).join('.') || fileNameOnly;
+
+        let file = null;
+        let foundKey = null;
+
+        // Try multiple path formats to find file
+        const tryPaths = [
+            meshPath,
+            normalizedPath,
+            '/' + normalizedPath,
+            fileNameOnly,
+            baseName
+        ];
+
+        for (const tryPath of tryPaths) {
+            if (fileMap.has(tryPath)) {
+                file = fileMap.get(tryPath);
+                foundKey = tryPath;
+                break;
+            }
+        }
+
+        // Case-insensitive fuzzy matching
+        if (!file) {
+            const searchNameLower = fileNameOnly.toLowerCase();
+            const baseNameLower = baseName.toLowerCase();
+
+            for (const [key, value] of fileMap.entries()) {
+                const keyNormalized = normalizePath(key);
+                const keyLower = keyNormalized.toLowerCase();
+                const keyFileName = keyNormalized.split('/').pop().toLowerCase();
+                const keyBaseName = keyFileName.split('.').slice(0, -1).join('.') || keyFileName;
+
+                if (keyLower === searchNameLower ||
+                    keyFileName === searchNameLower ||
+                    keyBaseName === baseNameLower ||
+                    keyLower.endsWith('/' + searchNameLower)) {
+                    file = value;
+                    foundKey = key;
+                    break;
+                }
+            }
+        }
+
+        // Try adding extensions
+        if (!file && !normalizedPath.includes('.')) {
+            const commonExts = ['.stl', '.obj', '.dae', '.gltf', '.glb'];
+            for (const ext of commonExts) {
+                const pathWithExt = normalizedPath + ext;
+                if (fileMap.has(pathWithExt)) {
+                    file = fileMap.get(pathWithExt);
+                    foundKey = pathWithExt;
+                    break;
+                }
+            }
+        }
+
+        if (!file) {
+            console.error(`Cannot find mesh file: ${meshPath}`);
+            return null;
+        }
+
+        // Determine file extension
+        const fileExt = file.name ? file.name.toLowerCase().split('.').pop() : meshPath.toLowerCase().split('.').pop();
+        const url = URL.createObjectURL(file);
+
+        try {
+            const loaders = await getLoaders();
+            let geometry = null;
+
+            switch (fileExt) {
+                case 'stl':
+                    geometry = await new Promise((resolve, reject) => {
+                        loaders.STLLoader.load(url, resolve, undefined, reject);
+                    });
+                    break;
+
+                case 'obj':
+                    // Try loading MTL file
+                    const mtlFileName = file.name.replace(/\.obj$/i, '.mtl');
+                    const mtlFile = Array.from(fileMap.values()).find(f =>
+                        f.name && f.name.toLowerCase() === mtlFileName.toLowerCase()
+                    );
+
+                    if (mtlFile) {
+                        try {
+                            const mtlUrl = URL.createObjectURL(mtlFile);
+                            const materials = await new Promise((resolve, reject) => {
+                                loaders.MTLLoader.load(mtlUrl, resolve, undefined, reject);
+                            });
+                            URL.revokeObjectURL(mtlUrl);
+                            materials.preload();
+                            loaders.OBJLoader.setMaterials(materials);
+                        } catch (error) {
+                            console.warn('MTL file loading failed:', error);
+                        }
+                    }
+
+                    geometry = await new Promise((resolve, reject) => {
+                        loaders.OBJLoader.load(url, resolve, undefined, reject);
+                    });
+
+                    loaders.OBJLoader.setMaterials(null);
+                    break;
+
+                case 'dae':
+                    const daeResult = await new Promise((resolve, reject) => {
+                        loaders.ColladaLoader.load(url, resolve, undefined, reject);
+                    });
+                    geometry = daeResult ? daeResult.scene : null;
+                    break;
+
+                case 'gltf':
+                case 'glb':
+                    const gltfResult = await new Promise((resolve, reject) => {
+                        loaders.GLTFLoader.load(url, resolve, undefined, reject);
+                    });
+                    geometry = gltfResult ? gltfResult.scene : null;
+                    break;
+
+                default:
+                    console.warn(`Unsupported mesh file format: ${fileExt}`);
+                    URL.revokeObjectURL(url);
+                    return null;
+            }
+
+            URL.revokeObjectURL(url);
+            return geometry;
+        } catch (error) {
+            URL.revokeObjectURL(url);
+            console.error(`Failed to load mesh file: ${meshPath}`, error);
+            return null;
+        }
+    } catch (error) {
+        console.error(`Failed to process mesh file: ${meshPath}`, error);
+        return null;
+    }
+}
+
+/**
+ * Ensure mesh uses lighting-compatible material
+ */
+export function ensureMeshHasPhongMaterial(meshObject) {
+    meshObject.traverse((child) => {
+        if (child.isMesh && child.material) {
+            if (child.material.type === 'MeshBasicMaterial') {
+                const oldMaterial = child.material;
+                child.material = new THREE.MeshPhongMaterial({
+                    color: oldMaterial.color,
+                    map: oldMaterial.map,
+                    transparent: oldMaterial.transparent,
+                    opacity: oldMaterial.opacity,
+                    side: oldMaterial.side,
+                    shininess: 30,
+                    specular: 0x444444
+                });
+                if (child.material.map) {
+                    child.material.map.colorSpace = THREE.SRGBColorSpace;
+                }
+            } else if (!child.material.specular || child.material.specular.getHex() === 0x000000) {
+                child.material.specular = new THREE.Color(0x444444);
+                if (child.material.shininess === undefined || child.material.shininess === 0) {
+                    child.material.shininess = 30;
+                }
+            }
+        }
+    });
+}
+
+export { getLoaders };
+
