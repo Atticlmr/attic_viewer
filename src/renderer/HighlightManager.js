@@ -198,15 +198,16 @@ export class HighlightManager {
     }
 
     /**
-     * Show hover information (Link name, parent Joint name, mass)
+     * Show hover information (Link name, parent Joint name, mass, pose)
      */
     showHoverInfo(link, currentModel) {
         const hoverInfo = document.getElementById('hover-info');
         const jointNameEl = document.getElementById('hover-joint-name');
         const linkNameEl = document.getElementById('hover-link-name');
         const linkMassEl = document.getElementById('hover-link-mass');
+        const linkPoseEl = document.getElementById('hover-link-pose');
 
-        if (!hoverInfo || !jointNameEl || !linkNameEl || !linkMassEl) return;
+        if (!hoverInfo || !jointNameEl || !linkNameEl || !linkMassEl || !linkPoseEl) return;
 
         // Line 1: Display Link name
         linkNameEl.textContent = `Link: ${link.name || 'Unknown'}`;
@@ -313,6 +314,48 @@ export class HighlightManager {
             } else {
                 mergedLinksEl.style.display = 'none';
             }
+        }
+
+        // Line 5: Display link position and orientation
+        if (linkPoseEl && link.threeObject) {
+            const linkPos = new THREE.Vector3();
+            const linkQuat = new THREE.Quaternion();
+            const linkEuler = new THREE.Euler();
+
+            link.threeObject.getWorldPosition(linkPos);
+            link.threeObject.getWorldQuaternion(linkQuat);
+            linkEuler.setFromQuaternion(linkQuat, 'XYZ');
+            
+            const num_sig_figs = 4; // Decimals to display
+            const quatX = linkQuat.x.toFixed(num_sig_figs);
+            const quatY = linkQuat.y.toFixed(num_sig_figs);
+            const quatZ = linkQuat.z.toFixed(num_sig_figs);
+            const quatW = linkQuat.w.toFixed(num_sig_figs);
+
+            const rollRad = linkEuler.x.toFixed(num_sig_figs);
+            const pitchRad = linkEuler.y.toFixed(num_sig_figs);
+            const yawRad = linkEuler.z.toFixed(num_sig_figs);
+
+            const rollDeg = THREE.MathUtils.radToDeg(linkEuler.x).toFixed(num_sig_figs);
+            const pitchDeg = THREE.MathUtils.radToDeg(linkEuler.y).toFixed(num_sig_figs);
+            const yawDeg = THREE.MathUtils.radToDeg(linkEuler.z).toFixed(num_sig_figs);
+
+            const positionBlock = 
+                `• Position (world):\n` +
+                `    \tx = ${linkPos.x.toFixed(num_sig_figs)} m\n` +
+                `    \ty = ${linkPos.y.toFixed(num_sig_figs)} m\n` +
+                `    \tz = ${linkPos.z.toFixed(num_sig_figs)} m\n`;
+            const orientationBlock = 
+            `• Orientation (world):\n` +
+            `   Quat: x=${quatX} y=${quatY} z=${quatZ} w=${quatW}\n` +
+            `   RPY (deg): r=${rollRad} p=${pitchRad} y=${yawRad}\n` +
+            `   RPY (rad): r=${rollDeg} p=${pitchDeg} y=${yawDeg}\n`;
+
+            linkPoseEl.textContent = positionBlock + orientationBlock;
+            linkPoseEl.style.display = 'block';
+        } else if (linkPoseEl) {
+            linkPoseEl.textContent = 'Link pose: N/A';
+            linkPoseEl.style.display = 'block';
         }
 
         // Show tooltip

@@ -635,4 +635,3 @@ export class JointControlsUI {
         });
     }
 }
-
