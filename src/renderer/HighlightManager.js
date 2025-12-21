@@ -325,7 +325,7 @@ export class HighlightManager {
             link.threeObject.getWorldPosition(linkPos);
             link.threeObject.getWorldQuaternion(linkQuat);
             linkEuler.setFromQuaternion(linkQuat, 'XYZ');
-            
+
             const num_sig_figs = 4; // Decimals to display
             const quatX = linkQuat.x.toFixed(num_sig_figs);
             const quatY = linkQuat.y.toFixed(num_sig_figs);
@@ -340,16 +340,16 @@ export class HighlightManager {
             const pitchDeg = THREE.MathUtils.radToDeg(linkEuler.y).toFixed(num_sig_figs);
             const yawDeg = THREE.MathUtils.radToDeg(linkEuler.z).toFixed(num_sig_figs);
 
-            const positionBlock = 
-                `• Position (world):\n` +
-                `    \tx = ${linkPos.x.toFixed(num_sig_figs)} m\n` +
-                `    \ty = ${linkPos.y.toFixed(num_sig_figs)} m\n` +
-                `    \tz = ${linkPos.z.toFixed(num_sig_figs)} m\n`;
-            const orientationBlock = 
-            `• Orientation (world):\n` +
-            `   Quat: x=${quatX} y=${quatY} z=${quatZ} w=${quatW}\n` +
-            `   RPY (deg): r=${rollRad} p=${pitchRad} y=${yawRad}\n` +
-            `   RPY (rad): r=${rollDeg} p=${pitchDeg} y=${yawDeg}\n`;
+            const positionBlock =
+                `Position (world):\n` +
+                `- x = ${linkPos.x.toFixed(num_sig_figs)} m` +
+                `- y = ${linkPos.y.toFixed(num_sig_figs)} m` +
+                `- z = ${linkPos.z.toFixed(num_sig_figs)} m\n`;
+            const orientationBlock =
+            `Orientation (world):\n` +
+            `- Quat: x=${quatX} y=${quatY} z=${quatZ} w=${quatW}\n` +
+            `- RPY (deg): r=${rollRad} p=${pitchRad} y=${yawRad}\n` +
+            `- RPY (rad): r=${rollDeg} p=${pitchDeg} y=${yawDeg}\n`;
 
             linkPoseEl.textContent = positionBlock + orientationBlock;
             linkPoseEl.style.display = 'block';
