@@ -199,9 +199,25 @@ export class VisualizationManager {
     processNewlyLoadedMeshes(model) {
         if (!model.threeObject) return;
 
-        // Process materials for all meshes (including newly loaded ones)
+        // First pass: Process materials for visual meshes only (skip collision meshes)
         model.threeObject.traverse((child) => {
             if (child.isMesh && child.material) {
+                // Check if this is a collision mesh
+                let isInCollider = false;
+                let checkNode = child;
+                while (checkNode) {
+                    if (checkNode.isURDFCollider) {
+                        isInCollider = true;
+                        break;
+                    }
+                    checkNode = checkNode.parent;
+                }
+
+                // Skip collision meshes in material processing - they will be handled separately
+                if (isInCollider) {
+                    return;
+                }
+
                 const materials = Array.isArray(child.material) ? child.material : [child.material];
                 const processedMaterials = [];
 
@@ -293,9 +309,13 @@ export class VisualizationManager {
                     child.material = processedMaterials[0];
                 }
             }
+        });
 
-            // Add newly loaded visual meshes
-            if ((child.isMesh || child.type === 'Mesh') && !this.visualMeshes.includes(child)) {
+        // Second pass: Add newly loaded visual meshes or collision meshes
+        model.threeObject.traverse((child) => {
+
+            // Add newly loaded visual meshes or collision meshes
+            if ((child.isMesh || child.type === 'Mesh') && !this.visualMeshes.includes(child) && !this.collisionMeshes.includes(child)) {
                 let isInCollider = false;
                 let checkNode = child;
                 while (checkNode) {
@@ -306,7 +326,36 @@ export class VisualizationManager {
                     checkNode = checkNode.parent;
                 }
 
-                if (!isInCollider) {
+                if (isInCollider) {
+                    // This is a newly loaded collision mesh - set collision material
+                    if (!child.userData.originalMaterial) {
+                        child.userData.originalMaterial = child.material;
+                    }
+
+                    // Set collision-specific material (semi-transparent yellow)
+                    child.material = new THREE.MeshPhongMaterial({
+                        transparent: true,
+                        opacity: 0.35,
+                        shininess: 2.5,
+                        premultipliedAlpha: true,
+                        color: 0xffbe38,
+                        polygonOffset: true,
+                        polygonOffsetFactor: -1,
+                        polygonOffsetUnits: -1,
+                    });
+
+                    child.castShadow = false;
+                    child.receiveShadow = false;
+
+                    // Disable raycasting for colliders
+                    child.raycast = () => {};
+
+                    // Set visibility based on current collision display state
+                    child.visible = this.showCollision;
+
+                    this.collisionMeshes.push(child);
+                } else {
+                    // This is a visual mesh
                     child.castShadow = this.showShadow;
                     child.receiveShadow = this.showShadow;
                     child.visible = this.showVisual;
