@@ -23,7 +23,7 @@ export class FileTreeView {
         listContainer.innerHTML = '';
 
         if (files.length === 0) {
-            listContainer.innerHTML = '<div class="empty-state">No model files found</div>';
+            this.showLoadButton(listContainer);
             return;
         }
 
@@ -33,6 +33,126 @@ export class FileTreeView {
         if (preserveState && expandedPaths.length > 0) {
             setTimeout(() => this.restoreTreeState(expandedPaths), 0);
         }
+    }
+
+    /**
+     * Show load file/folder button when no files are loaded
+     */
+    showLoadButton(container) {
+        const emptyContainer = document.createElement('div');
+        emptyContainer.className = 'file-tree-empty-container';
+        emptyContainer.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            min-height: 200px;
+            padding: 20px;
+            gap: 12px;
+        `;
+
+        const emptyText = document.createElement('div');
+        emptyText.className = 'empty-state';
+        emptyText.style.cssText = 'margin: 0; padding: 0; text-align: center; line-height: 1.6;';
+
+        // First line: drag and drop hint
+        const line1 = document.createElement('div');
+        line1.textContent = window.i18n?.t('dropHint') || 'Drag and drop robot model files or folders anywhere';
+
+        // Second line: or click button
+        const line2 = document.createElement('div');
+        line2.textContent = window.i18n?.t('orClickButton') || 'or click button to load';
+        line2.style.marginTop = '4px';
+
+        emptyText.appendChild(line1);
+        emptyText.appendChild(line2);
+
+        // Create button container for two buttons
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = `
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        `;
+
+        // Load Files Button
+        const loadFilesButton = document.createElement('button');
+        loadFilesButton.className = 'control-button load-files-btn';
+        loadFilesButton.innerHTML = '<span>' + (window.i18n?.t('loadFiles') || 'Load Files') + '</span>';
+        loadFilesButton.style.cssText = `
+            padding: 8px 16px;
+            font-size: 13px;
+            flex: 1;
+        `;
+        loadFilesButton.title = '选择单个或多个文件';
+        loadFilesButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.triggerFileLoad(false);
+        });
+
+        // Load Folder Button
+        const loadFolderButton = document.createElement('button');
+        loadFolderButton.className = 'control-button load-folder-btn';
+        loadFolderButton.innerHTML = '<span>' + (window.i18n?.t('loadFolder') || 'Load Folder') + '</span>';
+        loadFolderButton.style.cssText = `
+            padding: 8px 16px;
+            font-size: 13px;
+            flex: 1;
+        `;
+        loadFolderButton.title = '选择整个文件夹';
+        loadFolderButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.triggerFileLoad(true);
+        });
+
+        buttonContainer.appendChild(loadFilesButton);
+        buttonContainer.appendChild(loadFolderButton);
+
+        emptyContainer.appendChild(emptyText);
+        emptyContainer.appendChild(buttonContainer);
+        container.appendChild(emptyContainer);
+    }
+
+    /**
+     * Trigger file/folder loading dialog
+     */
+    triggerFileLoad(isFolder = false) {
+        // Create a temporary file input to allow file selection
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        input.webkitdirectory = isFolder;
+        input.style.display = 'none';
+
+        if (!isFolder) {
+            input.setAttribute('accept', '.urdf,.xml,.dae,.stl,.obj,.collada,.usd,.usda,.usdc,.usdz');
+        }
+
+        input.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            if (files && files.length > 0) {
+                // Create a drag event and dispatch it
+                const dt = new DataTransfer();
+                files.forEach(file => dt.items.add(file));
+
+                const dropEvent = new DragEvent('drop', {
+                    bubbles: true,
+                    cancelable: true,
+                    dataTransfer: dt
+                });
+
+                document.body.dispatchEvent(dropEvent);
+            }
+            // Clean up
+            document.body.removeChild(input);
+        });
+
+        // Add to DOM temporarily and trigger click
+        document.body.appendChild(input);
+        input.click();
     }
 
     /**

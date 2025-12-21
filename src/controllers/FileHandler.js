@@ -96,7 +96,11 @@ export class FileHandler {
                 for (const file of files) {
                     const path = file.webkitRelativePath || file.name;
                     this.fileMap.set(path, file);
-                    this.fileMap.set(file.name, file);
+                    // Only add file.name as a separate key if there's no webkitRelativePath
+                    // This prevents duplicate entries in the file tree
+                    if (!file.webkitRelativePath) {
+                        this.fileMap.set(file.name, file);
+                    }
                 }
 
                 const loadableFiles = await this.findAllLoadableFiles(Array.from(files));

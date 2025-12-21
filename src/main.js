@@ -95,6 +95,9 @@ class App {
                 this.handleFileClick(fileInfo);
             };
 
+            // Initialize file tree with empty state (shows load button)
+            this.fileTreeView.updateFileTree([], new Map());
+
             // Initialize panel manager
             this.panelManager = new PanelManager();
             this.panelManager.initAllPanels();

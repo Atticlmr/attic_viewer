@@ -72,6 +72,10 @@ export const translations = {
         // 其他
         'noFolder': '未加载文件夹',
         'noModel': '未加载模型',
+        'load': '加载',
+        'loadFiles': '加载文件',
+        'loadFolder': '加载文件夹',
+        'orClickButton': '或点击下面的按钮加载',
         'noControllableJoints': '未找到可控制关节',
         'clickToEditMin': '点击编辑下限',
         'clickToEditMax': '点击编辑上限',
@@ -191,6 +195,10 @@ export const translations = {
         // Others
         'noFolder': 'No Folder Loaded',
         'noModel': 'No Model Loaded',
+        'load': 'Load',
+        'loadFiles': 'Load Files',
+        'loadFolder': 'Load Folder',
+        'orClickButton': 'or click the button below to load',
         'noControllableJoints': 'No Controllable Joints Found',
         'clickToEditMin': 'Click to edit minimum',
         'clickToEditMax': 'Click to edit maximum',
