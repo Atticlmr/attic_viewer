@@ -26,14 +26,16 @@ export class MJCFAdapter {
         const model = new UnifiedRobotModel();
         model.name = 'mujoco_model';
 
+        // Parse default values and class definitions in default tags first
+        // (needed for mesh scale inheritance)
+        const { classDefaults, rootDefaults } = this.parseDefaults(doc);
+
         // Parse mesh definitions in asset tags (build mesh name to file path mapping)
-        const meshMap = this.parseAssets(doc);
+        // Pass classDefaults and rootDefaults to inherit mesh scale
+        const meshMap = this.parseAssets(doc, classDefaults, rootDefaults);
 
         // Parse material definitions in material tags
         const materialMap = this.parseMaterials(doc);
-
-        // Parse default values and class definitions in default tags
-        const defaultsMap = this.parseDefaults(doc);
 
         // Get worldbody (root node)
         const worldbody = doc.querySelector('worldbody');
@@ -143,7 +145,7 @@ export class MJCFAdapter {
         this.parseBodies(worldbody, null, bodyMap, model, null, meshMap, null, materialMap);
 
         // Parse all joints
-        this.parseJoints(worldbody, bodyMap, model, null, defaultsMap);
+        this.parseJoints(worldbody, bodyMap, model, null, classDefaults);
 
         // Parse equality constraints (closed-chain constraints for parallel mechanisms)
         this.parseEquality(doc, model);
@@ -173,10 +175,12 @@ export class MJCFAdapter {
     /**
      * Parse mesh definitions in asset tags
      * @param {Document} doc - XML document
+     * @param {Map} classDefaults - Class default properties map (optional)
+     * @param {object} rootDefaults - Root default properties (optional)
      * @returns {Map<string, object>} Mapping from mesh names to mesh data
-     * Mesh data can be: { type: 'file', path: string } or { type: 'vertex', vertices: Float32Array, scale: [x,y,z] }
+     * Mesh data can be: { type: 'file', path: string, scale: [x,y,z] } or { type: 'vertex', vertices: Float32Array, scale: [x,y,z] }
      */
-    static parseAssets(doc) {
+    static parseAssets(doc, classDefaults = null, rootDefaults = null) {
         const meshMap = new Map();
         const asset = doc.querySelector('asset');
         if (!asset) {
@@ -189,6 +193,29 @@ export class MJCFAdapter {
             const file = meshEl.getAttribute('file');
             const vertex = meshEl.getAttribute('vertex');
             const scale = meshEl.getAttribute('scale');
+            const meshClass = meshEl.getAttribute('class');
+
+            // Parse scale (priority: direct attribute > class inheritance > root defaults > [1,1,1])
+            let scaleVec = [1, 1, 1];
+            
+            // First check direct scale attribute
+            if (scale) {
+                const scaleValues = scale.trim().split(/\s+/).map(parseFloat);
+                if (scaleValues.length === 1) {
+                    scaleVec = [scaleValues[0], scaleValues[0], scaleValues[0]];
+                } else if (scaleValues.length === 3) {
+                    scaleVec = scaleValues;
+                }
+            } else if (meshClass && classDefaults && classDefaults.has(meshClass)) {
+                // Try to inherit scale from class defaults
+                const classDefault = classDefaults.get(meshClass);
+                if (classDefault.mesh && classDefault.mesh.scale) {
+                    scaleVec = classDefault.mesh.scale;
+                }
+            } else if (rootDefaults && rootDefaults.mesh && rootDefaults.mesh.scale) {
+                // Fall back to root defaults (e.g., robotis_op3)
+                scaleVec = rootDefaults.mesh.scale;
+            }
 
             // If has vertex attribute, it's an inline-defined mesh
             if (vertex) {
@@ -199,17 +226,6 @@ export class MJCFAdapter {
                 // Parse vertex data
                 const vertexValues = vertex.trim().split(/\s+/).map(parseFloat);
                 const vertices = new Float32Array(vertexValues);
-
-                // Parse scale
-                let scaleVec = [1, 1, 1];
-                if (scale) {
-                    const scaleValues = scale.trim().split(/\s+/).map(parseFloat);
-                    if (scaleValues.length === 1) {
-                        scaleVec = [scaleValues[0], scaleValues[0], scaleValues[0]];
-                    } else if (scaleValues.length === 3) {
-                        scaleVec = scaleValues;
-                    }
-                }
 
                 meshMap.set(name, {
                     type: 'vertex',
@@ -228,7 +244,8 @@ export class MJCFAdapter {
 
                 meshMap.set(name, {
                     type: 'file',
-                    path: file
+                    path: file,
+                    scale: scaleVec
                 });
             } else {
                 console.warn('MJCF mesh element missing file or vertex attribute, skipping');
@@ -293,10 +310,11 @@ export class MJCFAdapter {
     /**
      * Parse default values and class definitions in default tags
      * @param {Document} doc - XML document
-     * @returns {Map<string, object>} Mapping from class names to default properties
+     * @returns {object} Object containing classDefaults Map and rootDefaults object
      */
     static parseDefaults(doc) {
-        const defaultsMap = new Map();
+        const classDefaults = new Map();
+        let rootDefaults = {};
 
         // Recursively parse default tags
         const parseDefaultElement = (defaultEl, parentDefaults = {}) => {
@@ -304,6 +322,25 @@ export class MJCFAdapter {
 
             // Start from parent defaults, deep copy to avoid reference issues
             const defaults = JSON.parse(JSON.stringify(parentDefaults || {}));
+
+            // Parse mesh default values
+            const meshEl = defaultEl.querySelector(':scope > mesh');
+            if (meshEl) {
+                if (!defaults.mesh) {
+                    defaults.mesh = {};
+                }
+
+                // Parse scale
+                const scale = meshEl.getAttribute('scale');
+                if (scale) {
+                    const scaleVals = scale.trim().split(/\s+/).map(parseFloat);
+                    if (scaleVals.length === 1) {
+                        defaults.mesh.scale = [scaleVals[0], scaleVals[0], scaleVals[0]];
+                    } else if (scaleVals.length === 3) {
+                        defaults.mesh.scale = scaleVals;
+                    }
+                }
+            }
 
             // Parse joint default values
             const jointEl = defaultEl.querySelector(':scope > joint');
@@ -334,9 +371,13 @@ export class MJCFAdapter {
                 }
             }
 
-            // If has class name, save to map
+            // If has class name, save to class map
             if (className) {
-                defaultsMap.set(className, defaults);
+                classDefaults.set(className, defaults);
+            } else {
+                // No class name means this is a root default (inherits to all)
+                // Store the final computed defaults as rootDefaults
+                Object.assign(rootDefaults, defaults);
             }
 
             // Recursively process nested default tags
@@ -347,12 +388,12 @@ export class MJCFAdapter {
         };
 
         // Start parsing from root default tags
-        const rootDefaults = doc.querySelectorAll('mujoco > default');
-        rootDefaults.forEach(defaultEl => {
+        const rootDefaultElements = doc.querySelectorAll('mujoco > default');
+        rootDefaultElements.forEach(defaultEl => {
             parseDefaultElement(defaultEl);
         });
 
-        return defaultsMap;
+        return { classDefaults, rootDefaults };
     }
 
     /**
@@ -597,6 +638,10 @@ export class MJCFAdapter {
                     if (meshData.type === 'file') {
                         // External file mesh
                         geometry.filename = meshData.path;
+                        // Apply mesh scale from asset definition (class inheritance)
+                        if (meshData.scale) {
+                            geometry.meshScale = meshData.scale;
+                        }
                     } else if (meshData.type === 'vertex') {
                         // Inline vertex mesh, store vertex data
                         geometry.inlineVertices = meshData.vertices;
@@ -1528,6 +1573,12 @@ export class MJCFAdapter {
                     if (cachedMesh.isGroup || cachedMesh.isObject3D) {
                         threeGeometry = cachedMesh.clone(true); // Deep clone (including materials)
 
+                        // Apply mesh scale from MJCF class inheritance (e.g., scale="0.001 0.001 0.001")
+                        if (geometry.meshScale) {
+                            const [sx, sy, sz] = geometry.meshScale;
+                            threeGeometry.scale.set(sx, sy, sz);
+                        }
+
                         // Check cloned mesh material situation
                         let meshCount = 0;
                         let materialCount = 0;
@@ -1544,8 +1595,15 @@ export class MJCFAdapter {
                         ensureMeshHasPhongMaterial(threeGeometry);
                         return threeGeometry;
                     }
-                    // If BufferGeometry, can be shared (geometry can be used by multiple meshes)
-                    threeGeometry = cachedMesh;
+                    // If BufferGeometry (e.g., STL), create a mesh and apply scale
+                    if (geometry.meshScale) {
+                        const [sx, sy, sz] = geometry.meshScale;
+                        // Scale the geometry directly
+                        threeGeometry = cachedMesh.clone();
+                        threeGeometry.scale(sx, sy, sz);
+                    } else {
+                        threeGeometry = cachedMesh;
+                    }
                 } else {
                     console.warn('⚠️ Mesh type geometry missing filename');
                     return null;
