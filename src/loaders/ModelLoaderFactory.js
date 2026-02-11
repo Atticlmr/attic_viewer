@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { URDFAdapter } from '../adapters/URDFAdapter.js';
 import { MJCFAdapter } from '../adapters/MJCFAdapter.js';
 import { USDAdapter } from '../adapters/USDAdapter.js';
+import { XacroAdapter } from '../adapters/XacroAdapter.js';
 
 export class ModelLoaderFactory {
     /**
@@ -17,6 +18,8 @@ export class ModelLoaderFactory {
         switch (ext) {
             case 'urdf':
                 return 'urdf';
+            case 'xacro':
+                return 'xacro';
             case 'xml':
                 // XML files are MJCF format, verify if it's a robot file by content
                 if (content) {
@@ -102,6 +105,8 @@ export class ModelLoaderFactory {
         switch (fileType) {
             case 'urdf':
                 return await this.loadURDF(content, fileName, fileMap, file);
+            case 'xacro':
+                return await this.loadXacro(content, fileName, fileMap, file);
             case 'mjcf':
                 return await this.loadMJCF(content, fileMap);
             case 'usd':
@@ -340,6 +345,23 @@ export class ModelLoaderFactory {
                 reject(new Error('URDF loading failed: ' + (error.message || error)));
             });
         });
+    }
+
+    /**
+     * Load Xacro
+     * @param {string} content - Xacro content
+     * @param {string} fileName - Xacro file key in fileMap (includes path)
+     * @param {Map} fileMap - File map
+     * @param {File} file - Original file object (optional)
+     */
+    static async loadXacro(content, fileName, fileMap = null, file = null) {
+        try {
+            const model = await XacroAdapter.parse(content, fileName, fileMap, file);
+            return model;
+        } catch (error) {
+            console.error('Xacro parsing error:', error);
+            throw new Error('Xacro parsing failed: ' + error.message);
+        }
     }
 
     /**
