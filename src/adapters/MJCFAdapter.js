@@ -8,14 +8,152 @@ import { loadMeshFile, ensureMeshHasPhongMaterial, getLoaders } from '../utils/M
 
 export class MJCFAdapter {
     /**
+     * Process include tags in MJCF XML
+     * Replaces <include file="path"/> with the content of the referenced file
+     * @param {string} xmlContent - MJCF XML content
+     * @param {Map} fileMap - File map for loading included files
+     * @param {string} basePath - Base path for resolving relative paths
+     * @returns {Promise<string>} Processed XML content
+     */
+    static async processIncludes(xmlContent, fileMap = null, basePath = null) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xmlContent, 'text/xml');
+
+        // Check for parse errors
+        const parseError = doc.querySelector('parsererror');
+        if (parseError) {
+            // If there's a parse error, return original content
+            console.warn('Initial XML parse error, skipping include processing:', parseError.textContent);
+            return xmlContent;
+        }
+
+        // Find all include elements
+        const includes = doc.querySelectorAll('include');
+
+        if (includes.length === 0) {
+            return xmlContent;
+        }
+
+        console.log(`Processing ${includes.length} include tag(s)...`);
+
+        // Process each include tag
+        for (const includeEl of includes) {
+            const filePath = includeEl.getAttribute('file');
+
+            if (!filePath) {
+                console.warn('Include tag missing file attribute');
+                includeEl.remove();
+                continue;
+            }
+
+            // Try to find the included file in fileMap
+            let includedContent = null;
+
+            if (fileMap) {
+                // Try different path variations
+                const pathVariations = [
+                    filePath,
+                    basePath ? basePath + '/' + filePath : filePath,
+                    filePath.startsWith('/') ? filePath : '/' + filePath
+                ];
+
+                for (const path of pathVariations) {
+                    // Try exact match first
+                    if (fileMap.has(path)) {
+                        const file = fileMap.get(path);
+                        try {
+                            includedContent = await file.text();
+                            console.log(`Found included file: ${path}`);
+                            break;
+                        } catch (e) {
+                            console.warn(`Failed to read included file ${path}:`, e);
+                        }
+                    }
+
+                    // Try case-insensitive match
+                    for (const [key, value] of fileMap) {
+                        if (key.toLowerCase() === path.toLowerCase()) {
+                            try {
+                                includedContent = await value.text();
+                                console.log(`Found included file (case-insensitive): ${key}`);
+                                break;
+                            } catch (e) {
+                                console.warn(`Failed to read included file ${key}:`, e);
+                            }
+                        }
+                    }
+                    if (includedContent) break;
+                }
+            }
+
+            if (!includedContent) {
+                console.warn(`Could not find included file: ${filePath}`);
+                includeEl.remove();
+                continue;
+            }
+
+            // Parse the included content
+            const includedDoc = parser.parseFromString(includedContent, 'text/xml');
+            const includedParseError = includedDoc.querySelector('parsererror');
+
+            if (includedParseError) {
+                console.warn(`Failed to parse included file ${filePath}:`, includedParseError.textContent);
+                includeEl.remove();
+                continue;
+            }
+
+            // Get the mujoco root element from included file
+            const includedRoot = includedDoc.querySelector('mujoco');
+
+            if (!includedRoot) {
+                console.warn(`Included file ${filePath} has no mujoco root element`);
+                includeEl.remove();
+                continue;
+            }
+
+            // Move all child elements from included mujoco to current document
+            // Insert them before the include element
+            const childNodes = Array.from(includedRoot.childNodes);
+
+            for (const child of childNodes) {
+                // Skip text nodes and comment nodes
+                if (child.nodeType === Node.TEXT_NODE ||
+                    (child.nodeType === Node.COMMENT_NODE) ||
+                    (child.nodeType === Node.PROCESSING_INSTRUCTION_NODE)) {
+                    continue;
+                }
+
+                // Clone the node to avoid removing from included doc
+                const importedNode = doc.importNode(child, true);
+
+                // Insert before the include element
+                includeEl.parentNode.insertBefore(importedNode, includeEl);
+            }
+
+            console.log(`Successfully included content from: ${filePath}`);
+
+            // Remove the include element
+            includeEl.remove();
+        }
+
+        // Serialize the modified document back to string
+        const serializer = new XMLSerializer();
+        return serializer.serializeToString(doc);
+    }
+
+    /**
      * Parse MJCF XML content and convert to unified model
      * @param {string} xmlContent - MJCF XML content
      * @param {Map} fileMap - File map (optional), for loading mesh files
+     * @param {string} basePath - Base path for resolving relative include paths (optional)
      * @returns {Promise<UnifiedRobotModel>}
      */
-    static async parse(xmlContent, fileMap = null) {
+    static async parse(xmlContent, fileMap = null, basePath = null) {
+        // Process include tags first
+        const processedContent = await this.processIncludes(xmlContent, fileMap, basePath);
+
         const parser = new DOMParser();
-        const doc = parser.parseFromString(xmlContent, 'text/xml');
+        const doc = parser.parseFromString(processedContent, 'text/xml');
 
         // Check parse errors
         const parseError = doc.querySelector('parsererror');
@@ -859,6 +997,15 @@ export class MJCFAdapter {
      * Convert quaternion to Euler angles (simplified version)
      */
     static quaternionToEuler(w, x, y, z) {
+        // Normalize quaternion first (MJCF may use non-normalized quaternions)
+        const norm = Math.sqrt(w * w + x * x + y * y + z * z);
+        if (norm > 0) {
+            w = w / norm;
+            x = x / norm;
+            y = y / norm;
+            z = z / norm;
+        }
+
         // Simplified conversion (using standard formula)
         const sinr_cosp = 2 * (w * x + y * z);
         const cosr_cosp = 1 - 2 * (x * x + y * y);
