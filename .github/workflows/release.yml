@@ -1,6 +1,9 @@
 name: Build and Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   release:
     types: [published]
 
@@ -47,13 +50,15 @@ jobs:
       - name: Create release archive
         run: |
           cd dist
-          zip -r ../robot-viewer-${{ github.event.release.tag_name }}.zip .
+          zip -r ../robot-viewer-${{ github.ref_name }}.zip .
           cd ..
 
-      - name: Upload release asset
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.event.release.tag_name }}
-          files: robot-viewer-${{ github.event.release.tag_name }}.zip
-          overwrite: true
+          tag_name: ${{ github.ref_name }}
+          files: robot-viewer-${{ github.ref_name }}.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
