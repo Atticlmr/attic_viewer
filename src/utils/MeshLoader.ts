@@ -134,14 +134,14 @@ export async function loadMeshFile(meshPath, fileMap) {
                 case 'obj':
                     // Try loading MTL file
                     const mtlFileName = file.name.replace(/\.obj$/i, '.mtl');
-                    const mtlFile = Array.from(fileMap.values()).find(f =>
+                    const mtlFile = Array.from(fileMap.values()).find((f: any) =>
                         f.name && f.name.toLowerCase() === mtlFileName.toLowerCase()
                     );
 
                     if (mtlFile) {
                         try {
-                            const mtlUrl = URL.createObjectURL(mtlFile);
-                            const materials = await new Promise((resolve, reject) => {
+                            const mtlUrl = URL.createObjectURL(mtlFile as any);
+                            const materials: any = await new Promise((resolve, reject) => {
                                 loaders.MTLLoader.load(mtlUrl, resolve, undefined, reject);
                             });
                             URL.revokeObjectURL(mtlUrl);
@@ -160,7 +160,7 @@ export async function loadMeshFile(meshPath, fileMap) {
                     break;
 
                 case 'dae':
-                    const daeResult = await new Promise((resolve, reject) => {
+                    const daeResult: any = await new Promise((resolve, reject) => {
                         loaders.ColladaLoader.load(url, resolve, undefined, reject);
                     });
                     geometry = daeResult ? daeResult.scene : null;
@@ -168,7 +168,7 @@ export async function loadMeshFile(meshPath, fileMap) {
 
                 case 'gltf':
                 case 'glb':
-                    const gltfResult = await new Promise((resolve, reject) => {
+                    const gltfResult: any = await new Promise((resolve, reject) => {
                         loaders.GLTFLoader.load(url, resolve, undefined, reject);
                     });
                     geometry = gltfResult ? gltfResult.scene : null;
