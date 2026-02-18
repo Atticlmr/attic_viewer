@@ -74,6 +74,51 @@ export class FileHandler {
         }, false);
     }
 
+    /**
+     * Setup reload button click handler
+     */
+    setupReloadButton() {
+        const reloadBtn = document.getElementById('reload-files-btn');
+        if (reloadBtn) {
+            reloadBtn.addEventListener('click', () => {
+                this.triggerFileInput();
+            });
+        }
+    }
+
+    /**
+     * Trigger hidden file input to reload files
+     */
+    triggerFileInput() {
+        // Create hidden file input
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.multiple = true;
+        fileInput.accept = '.urdf,.xacro,.xml,.mjcf,.stl,.obj,.dae,.gltf,.glb,.usd,.usda,.usdc,.usdz';
+        fileInput.style.display = 'none';
+        document.body.appendChild(fileInput);
+
+        fileInput.addEventListener('change', async (e) => {
+            const files = (e.target as HTMLInputElement).files;
+            if (files && files.length > 0) {
+                this.fileMap.clear();
+                const fileArray = Array.from(files);
+
+                for (const file of fileArray) {
+                    this.fileMap.set(file.name, file);
+                }
+
+                // Process files
+                await this.processFiles(fileArray);
+            }
+            // Remove the input after use
+            document.body.removeChild(fileInput);
+        });
+
+        // Trigger click
+        fileInput.click();
+    }
+
 
     /**
      * Handle file drop
