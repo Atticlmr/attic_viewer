@@ -21,6 +21,9 @@ export class SceneManager {
     _pendingRender: boolean;
     _renderingPaused: boolean;
     _eventListeners: any;
+    _renderLoopId: any;
+    resizeObserver: any;
+    world: any;
     camera: any;
     renderer: any;
     controls: any;
