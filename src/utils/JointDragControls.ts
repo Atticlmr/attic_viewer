@@ -109,7 +109,19 @@ const plane = new THREE.Plane();
  * Universal joint drag controller base class
  */
 export class JointDragControls {
-    constructor(scene, camera, domElement, model) {
+    enabled: boolean;
+    scene: any;
+    camera: any;
+    domElement: any;
+    model: any;
+    raycaster: any;
+    initialGrabPoint: any;
+    hitDistance: number;
+    hovered: any;
+    manipulating: any;
+    renderer: any;
+
+    constructor(scene: any, camera: any, domElement: any, model: any) {
         this.enabled = true;
         this.scene = scene;
         this.camera = camera;

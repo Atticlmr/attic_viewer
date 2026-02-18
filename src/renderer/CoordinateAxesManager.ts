@@ -4,7 +4,13 @@ import * as THREE from 'three';
  * CoordinateAxesManager - Handles link coordinate axes and joint axes visualization
  */
 export class CoordinateAxesManager {
-    constructor(sceneManager) {
+    sceneManager: any;
+    linkAxesHelpers: any;
+    jointAxesHelpers: any;
+    showAxesEnabled: boolean;
+    showJointAxesEnabled: boolean;
+
+    constructor(sceneManager: any) {
         this.sceneManager = sceneManager;
         this.linkAxesHelpers = new Map();
         this.jointAxesHelpers = new Map();

@@ -6,7 +6,10 @@ import * as THREE from 'three';
 import * as d3 from 'd3';
 
 export class MeasurementController {
-    constructor(sceneManager) {
+    sceneManager: any;
+    selectedObjects: any[];
+
+    constructor(sceneManager: any) {
         this.sceneManager = sceneManager;
         this.selectedObjects = [];
     }

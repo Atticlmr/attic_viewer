@@ -5,7 +5,13 @@ import { MathUtils } from '../utils/MathUtils.js';
  * InertialVisualization - Handles center of mass and inertia visualization
  */
 export class InertialVisualization {
-    constructor(sceneManager) {
+    sceneManager: any;
+    comMarkers: any[];
+    inertiaEllipsoids: any[];
+    showCOM: boolean;
+    showInertia: boolean;
+
+    constructor(sceneManager: any) {
         this.sceneManager = sceneManager;
         this.comMarkers = [];
         this.inertiaEllipsoids = [];

@@ -5,7 +5,15 @@
 import * as THREE from 'three';
 
 export class EnvironmentManager {
-    constructor(scene) {
+    scene: any;
+    lights: any;
+    groundPlane: any;
+    globalAxes: any;
+    referenceGrid: any;
+    envMap: any;
+    pmremGenerator: any;
+
+    constructor(scene: any) {
         this.scene = scene;
         this.lights = {};
         this.groundPlane = null;

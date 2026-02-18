@@ -2,7 +2,9 @@
  * Simulation Handler - Handles MuJoCo simulation events
  */
 export class SimulationHandler {
-    constructor(app) {
+    app: any;
+
+    constructor(app: any) {
         this.app = app;
     }
 

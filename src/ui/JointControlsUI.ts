@@ -6,7 +6,13 @@ import { ModelLoaderFactory } from '../loaders/ModelLoaderFactory.js';
 import { XMLUpdater } from '../utils/XMLUpdater.js';
 
 export class JointControlsUI {
-    constructor(sceneManager) {
+    sceneManager: any;
+    angleUnit: string;
+    initialJointValues: any;
+    codeEditorManager: any;
+    isUpdatingFromEditor: boolean;
+
+    constructor(sceneManager: any) {
         this.sceneManager = sceneManager;
         this.angleUnit = 'rad';
         this.initialJointValues = new Map(); // Save initial joint positions when model loads

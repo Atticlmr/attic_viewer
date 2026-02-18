@@ -4,7 +4,13 @@
  */
 
 export class USDViewerManager {
-    constructor(container) {
+    container: any;
+    iframe: any;
+    isReady: boolean;
+    messageHandlers: any;
+    handleMessage: any;
+
+    constructor(container: any) {
         this.container = container;
         this.iframe = null;
         this.isReady = false;

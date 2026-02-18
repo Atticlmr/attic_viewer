@@ -3,6 +3,13 @@
  * Centralizes all application state
  */
 export class AppState {
+    currentModel: any;
+    currentMJCFFile: any;
+    currentMJCFModel: any;
+    angleUnit: string;
+    vscodeFileMap: any;
+    _isReloading: boolean;
+
     constructor() {
         this.currentModel = null;
         this.currentMJCFFile = null;
