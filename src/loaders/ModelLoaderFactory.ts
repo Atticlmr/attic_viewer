@@ -134,7 +134,7 @@ export class ModelLoaderFactory {
      */
     static async loadURDF(content, fileName, fileMap = null, file = null) {
         // Dynamically import urdf-loader
-        let URDFLoader;
+        let URDFLoader: any;
         try {
             const urdfModule = await import('urdf-loader');
             URDFLoader = urdfModule.URDFLoader || urdfModule.default || urdfModule;
@@ -158,7 +158,7 @@ export class ModelLoaderFactory {
                 const packages = this.extractPackagesFromURDF(content);
 
                 // Build package map (urdf-loader expects string paths)
-                const packageMap = {};
+                const packageMap: Record<string, string> = {};
 
                 // Create mapping for each package, return a path prefix for resolvePath
                 packages.forEach(pkg => {

@@ -2,7 +2,9 @@
  * USD Viewer Handler - Handles USD viewer container and manager
  */
 export class USDViewerHandler {
-    constructor(app) {
+    app: any;
+
+    constructor(app: any) {
         this.app = app;
     }
 
