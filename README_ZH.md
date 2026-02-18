@@ -2,7 +2,7 @@
 
 ---
 
-# Robot Viewer (机器人模型查看器)
+# Attic Viewer (机器人模型查看器)
 
 [![版本](https://img.shields.io/badge/version-v1.2.0-blue.svg)](https://github.com/Atticlmr/robot_viewer)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-yellow.svg)](LICENSE)
