@@ -76,7 +76,6 @@ export const translations = {
         'loadFiles': '加载文件',
         'loadFolder': '加载文件夹',
         'orClickButton': '或点击下面的按钮加载',
-        'reloadFiles': '重新加载',
         'noControllableJoints': '未找到可控制关节',
         'clickToEditMin': '点击编辑下限',
         'clickToEditMax': '点击编辑上限',
@@ -88,6 +87,7 @@ export const translations = {
         // 模型信息
         'type': '类型',
         'links': 'Links',
+        'joints': '关节',
         'controllable': '可控',
         'rootLink': '根Link',
 
@@ -199,7 +199,6 @@ export const translations = {
         'loadFiles': 'Load Files',
         'loadFolder': 'Load Folder',
         'orClickButton': 'or click the button below to load',
-        'reloadFiles': 'Reload',
         'noControllableJoints': 'No Controllable Joints Found',
         'clickToEditMin': 'Click to edit minimum',
         'clickToEditMax': 'Click to edit maximum',
@@ -211,6 +210,7 @@ export const translations = {
         // Model info
         'type': 'Type',
         'links': 'Links',
+        'joints': 'Joints',
         'controllable': 'Controllable',
         'rootLink': 'Root Link',
 
