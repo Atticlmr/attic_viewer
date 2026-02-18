@@ -102,13 +102,22 @@ export class ModelLoaderFactory {
      * @param {Object} options - Additional options (e.g., usdViewerManager)
      */
     static async loadModel(fileType, content, fileName, fileMap = null, file = null, options = {}) {
+        // Extract base path from fileName for MJCF include resolution
+        let basePath = null;
+        if (fileName) {
+            const lastSlash = Math.max(fileName.lastIndexOf('/'), fileName.lastIndexOf('\\'));
+            if (lastSlash > 0) {
+                basePath = fileName.substring(0, lastSlash);
+            }
+        }
+
         switch (fileType) {
             case 'urdf':
                 return await this.loadURDF(content, fileName, fileMap, file);
             case 'xacro':
                 return await this.loadXacro(content, fileName, fileMap, file);
             case 'mjcf':
-                return await this.loadMJCF(content, fileMap);
+                return await this.loadMJCF(content, fileMap, basePath);
             case 'usd':
                 return await this.loadUSD(content, fileMap, file, options);
             default:
@@ -823,9 +832,9 @@ export class ModelLoaderFactory {
     /**
      * Load MJCF
      */
-    static async loadMJCF(content, fileMap = null) {
+    static async loadMJCF(content, fileMap = null, basePath = null) {
         try {
-            const model = await MJCFAdapter.parse(content, fileMap);
+            const model = await MJCFAdapter.parse(content, fileMap, basePath);
             return model;
         } catch (error) {
             console.error('MJCF parsing error:', error);
