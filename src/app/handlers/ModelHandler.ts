@@ -2,7 +2,9 @@
  * Model Handler - Handles model loading and UI updates
  */
 export class ModelHandler {
-    constructor(app) {
+    app: any;
+
+    constructor(app: any) {
         this.app = app;
     }
 

@@ -4,7 +4,17 @@ import * as THREE from 'three';
  * VisualizationManager - Handles visual and collision mesh extraction and visibility
  */
 export class VisualizationManager {
-    constructor(sceneManager) {
+    sceneManager: any;
+    visualMeshes: any[];
+    collisionMeshes: any[];
+    colliders: any[];
+    hiddenLinks: any;
+    showVisual: boolean;
+    showCollision: boolean;
+    showShadow: boolean;
+    showEnhancedLighting: boolean;
+
+    constructor(sceneManager: any) {
         this.sceneManager = sceneManager;
         this.visualMeshes = [];
         this.collisionMeshes = [];

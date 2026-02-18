@@ -7,6 +7,13 @@ import { ModelLoaderFactory } from '../loaders/ModelLoaderFactory.js';
 import { readFileContent, getFileFromEntry, getFileTypeFromExtension, getFileDisplayType } from '../utils/FileUtils.js';
 
 export class FileHandler {
+    fileMap: any;
+    availableModels: any[];
+    currentModelFile: any;
+    onModelLoaded: any;
+    usdViewerManager: any;
+    usdViewerInitializer: any;
+
     constructor() {
         this.fileMap = new Map();
         this.availableModels = [];

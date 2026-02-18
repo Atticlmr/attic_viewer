@@ -9,7 +9,12 @@ import { githubLight, githubDark } from '@uiw/codemirror-theme-github';
 import { dracula } from '@uiw/codemirror-theme-dracula';
 
 export class CodeEditor {
-    constructor(parentElement, theme = 'vscode-dark') {
+    parentElement: any;
+    view: any;
+    onChangeCallback: any;
+    currentTheme: string;
+
+    constructor(parentElement: any, theme: string = 'vscode-dark') {
         this.parentElement = parentElement;
         this.view = null;
         this.onChangeCallback = null;

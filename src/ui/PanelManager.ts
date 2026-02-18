@@ -4,6 +4,10 @@
  */
 
 export class PanelManager {
+    panels: any;
+    modelGraphOriginalTransform: any;
+    modelGraphView: any;
+
     constructor() {
         this.panels = new Map();
         this.modelGraphOriginalTransform = null; // Save original transform of model structure graph

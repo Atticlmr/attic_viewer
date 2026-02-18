@@ -2,7 +2,9 @@
  * File Handler - Handles file click events
  */
 export class FileHandler {
-    constructor(app) {
+    app: any;
+
+    constructor(app: any) {
         this.app = app;
     }
 

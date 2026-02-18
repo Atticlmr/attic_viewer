@@ -5,7 +5,14 @@
 import * as d3 from 'd3';
 
 export class ModelGraphView {
-    constructor(sceneManager, measurementController = null) {
+    sceneManager: any;
+    measurementController: any;
+    codeEditorManager: any;
+    currentZoom: any;
+    currentSvg: any;
+    currentContainer: any;
+
+    constructor(sceneManager: any, measurementController: any = null) {
         this.sceneManager = sceneManager;
         this.measurementController = measurementController;
         this.codeEditorManager = null; // Code editor manager reference

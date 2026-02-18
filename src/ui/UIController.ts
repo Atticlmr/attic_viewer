@@ -4,7 +4,10 @@
 import * as THREE from 'three';
 
 export class UIController {
-    constructor(sceneManager) {
+    sceneManager: any;
+    angleUnit: string;
+
+    constructor(sceneManager: any) {
         this.sceneManager = sceneManager;
         this.angleUnit = 'rad';
     }

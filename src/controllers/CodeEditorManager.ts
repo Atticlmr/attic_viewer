@@ -6,6 +6,11 @@ import { CodeEditor } from '../editor/CodeEditor.js';
 import { readFileContent } from '../utils/FileUtils.js';
 
 export class CodeEditorManager {
+    codeEditorInstance: any;
+    editorState: any;
+    onReload: any;
+    fileMap: any;
+
     constructor() {
         this.codeEditorInstance = null;
         this.editorState = {

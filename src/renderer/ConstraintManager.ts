@@ -5,7 +5,11 @@ import { ModelLoaderFactory } from '../loaders/ModelLoaderFactory.js';
  * ConstraintManager - Handles parallel mechanism constraint visualization and solving
  */
 export class ConstraintManager {
-    constructor(sceneManager) {
+    sceneManager: any;
+    constraintVisuals: any[];
+    showConstraints: boolean;
+
+    constructor(sceneManager: any) {
         this.sceneManager = sceneManager;
         this.constraintVisuals = [];
         this.showConstraints = true;

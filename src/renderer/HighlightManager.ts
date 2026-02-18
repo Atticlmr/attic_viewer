@@ -4,7 +4,11 @@ import * as THREE from 'three';
  * HighlightManager - Handles link highlighting and hover information display
  */
 export class HighlightManager {
-    constructor(sceneManager) {
+    sceneManager: any;
+    currentHighlightedLink: any;
+    highlightMaterial: any;
+
+    constructor(sceneManager: any) {
         this.sceneManager = sceneManager;
         this.currentHighlightedLink = null;
 
