@@ -54,7 +54,7 @@ export const translations = {
         // 帮助对话框
         'helpTitle': `Robot Viewer v${APP_VERSION}`,
         'about': '关于',
-        'aboutContent': 'Robot Viewer 是一个基于 Three.js 的网页端机器人模型 3D 查看器，提供直观的可视化界面，帮助您在浏览器中查看和分析机器人的结构、关节和物理属性，无需安装任何软件。<br><br>格式支持：URDF、Xacro、MJCF、USD（部分支持）<br>机器人类型：串联机器人结构（暂不支持并联机器人）<br><br>由 <strong>范子琦</strong> 开发。',
+        'aboutContent': 'Attic Viewer 是一个基于 Three.js 的网页端机器人模型 3D 查看器，提供直观的可视化界面，帮助您在浏览器中查看和分析机器人的结构、关节和物理属性，无需安装任何软件。<br><br>格式支持：URDF、Xacro、MJCF、USD（部分支持）<br><br>主要功能：<br>• 可视化：视觉/碰撞几何、惯性张量、质心、坐标系<br>• 交互控制：实时拖动关节<br>• 测量工具：测量关节和连杆之间的距离<br>• 代码编辑器：内置 CodeMirror 编辑器，支持语法高亮<br>• 物理仿真：集成 MuJoCo 引擎（MJCF 模型）<br><br>由 <strong>Atticlmr</strong> 开发。',
         'projectHome': '项目主页',
         'email': '邮箱',
         'myGithub': '我的GitHub',
@@ -176,7 +176,7 @@ export const translations = {
         // Help dialog
         'helpTitle': `Robot Viewer v${APP_VERSION}`,
         'about': 'About',
-        'aboutContent': 'Robot Viewer is a web-based 3D viewer for robot models and scenes. Built on top of Three.js, it provides an intuitive interface for visualizing, editing, and simulating robots directly in the browser without any installation required. This tool helps you visualize and analyze robot structures, joints, and physical properties.<br><br>Format Support: URDF, Xacro, MJCF, USD (partial support)<br>Robot Types: Serial robot structures (parallel robots not currently supported)<br><br>Developed by <strong>Ziqi Fan</strong>.',
+        'aboutContent': 'Attic Viewer is a web-based 3D viewer for robot models and scenes. Built on top of Three.js, it provides an intuitive interface for visualizing, editing, and simulating robots directly in the browser without any installation required. This tool helps you visualize and analyze robot structures, joints, and physical properties.<br><br>Format Support: URDF, Xacro, MJCF, USD (partial support)<br><br>Key Features:<br>• Visualization: Visual/collision geometry, inertia tensors, center of mass, coordinate frames<br>• Interactive Controls: Drag joints in real-time<br>• Measurement Tools: Measure distances between joints and links<br>• Code Editor: Built-in CodeMirror editor with syntax highlighting<br>• Physics Simulation: Integrated MuJoCo engine (MJCF models)<br><br>Developed by <strong>Atticlmr</strong>.',
         'projectHome': 'Project Home',
         'email': 'Email',
         'myGithub': 'My GitHub',
