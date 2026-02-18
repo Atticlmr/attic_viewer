@@ -9,7 +9,9 @@ export class CodeEditorManager {
     codeEditorInstance: any;
     editorState: any;
     onReload: any;
+    onSaveAs: any;
     fileMap: any;
+    _reloadingInProgress: boolean;
 
     constructor() {
         this.codeEditorInstance = null;

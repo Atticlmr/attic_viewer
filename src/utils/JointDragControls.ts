@@ -430,7 +430,11 @@ export class JointDragControls {
  * Pointer-based joint drag controller
  */
 export class PointerJointDragControls extends JointDragControls {
-    constructor(scene, camera, domElement, model) {
+    _mouseDown: any;
+    _mouseMove: any;
+    _mouseUp: any;
+
+    constructor(scene: any, camera: any, domElement: any, model: any) {
         super(scene, camera, domElement, model);
         this.camera = camera;
         this.domElement = domElement;
