@@ -2,7 +2,9 @@
  * Model Tree Handler - Handles model tree panel events
  */
 export class ModelTreeHandler {
-    constructor(app) {
+    app: any;
+
+    constructor(app: any) {
         this.app = app;
     }
 
