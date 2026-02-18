@@ -43,6 +43,7 @@ export class SceneManager {
     ignoreLimits: boolean;
     dragControls: any;
     onMeasurementUpdate: any;
+    meshCoordinateAxes: any;
 
     constructor(canvas: any) {
         this.canvas = canvas;
