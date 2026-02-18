@@ -4,7 +4,10 @@ import * as THREE from 'three';
  * MeasurementManager - Handles distance measurement visualization
  */
 export class MeasurementManager {
-    constructor(sceneManager) {
+    sceneManager: any;
+    measurementHelper: any;
+
+    constructor(sceneManager: any) {
         this.sceneManager = sceneManager;
         this.measurementHelper = null;
     }

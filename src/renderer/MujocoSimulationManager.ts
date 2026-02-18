@@ -11,7 +11,27 @@ import { InertialVisualization } from './InertialVisualization.js';
 import { VisualizationManager } from './VisualizationManager.js';
 
 export class MujocoSimulationManager {
-    constructor(sceneManager) {
+    sceneManager: any;
+    mujoco: any;
+    model: any;
+    simulation: any;
+    state: any;
+    data: any;
+    bodies: any;
+    bodyToThreeMap: any;
+    lights: any[];
+    mujocoRoot: any;
+    dragStateManager: any;
+    originalModel: any;
+    params: any;
+    mujoco_time: number;
+    tmpVec: any;
+    tmpQuat: any;
+    isLoaded: boolean;
+    isSimulating: boolean;
+    isOldAPI: boolean;
+
+    constructor(sceneManager: any) {
         this.sceneManager = sceneManager;
         this.mujoco = null;
         this.model = null;
