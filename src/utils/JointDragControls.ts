@@ -120,6 +120,8 @@ export class JointDragControls {
     hovered: any;
     manipulating: any;
     renderer: any;
+    onUpdateJoint: any;
+    manipulatingLink: any;
 
     constructor(scene: any, camera: any, domElement: any, model: any) {
         this.enabled = true;

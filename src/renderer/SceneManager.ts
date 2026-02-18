@@ -42,6 +42,7 @@ export class SceneManager {
     currentModel: any;
     ignoreLimits: boolean;
     dragControls: any;
+    onMeasurementUpdate: any;
 
     constructor(canvas: any) {
         this.canvas = canvas;
