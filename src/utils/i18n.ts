@@ -87,7 +87,6 @@ export const translations = {
         // 模型信息
         'type': '类型',
         'links': 'Links',
-        'joints': '关节',
         'controllable': '可控',
         'rootLink': '根Link',
 
@@ -210,7 +209,6 @@ export const translations = {
         // Model info
         'type': 'Type',
         'links': 'Links',
-        'joints': 'Joints',
         'controllable': 'Controllable',
         'rootLink': 'Root Link',
 
