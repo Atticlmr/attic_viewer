@@ -427,7 +427,7 @@ export class MJCFAdapter {
             const name = matEl.getAttribute('name');
             if (!name) return;
 
-            const material = {};
+            const material: any = {};
 
             // Parse rgba
             const rgba = matEl.getAttribute('rgba');
@@ -960,7 +960,7 @@ export class MJCFAdapter {
      * Parse origin attribute (pos + quat or xyz + rpy)
      */
     static parseOrigin(element) {
-        const origin = { xyz: [0, 0, 0], rpy: [0, 0, 0] };
+        const origin: any = { xyz: [0, 0, 0], rpy: [0, 0, 0] };
 
         // Check pos attribute
         const pos = element.getAttribute('pos');
@@ -1562,7 +1562,7 @@ export class MJCFAdapter {
         // Create link groups
         let totalVisuals = 0;
         for (const [name, link] of model.links) {
-            const linkGroup = new THREE.Group();
+            const linkGroup: any = new THREE.Group();
             linkGroup.name = name;
             linkGroup.isURDFLink = true; // Mark as link for JointDragControls recognition
             linkGroup.type = 'URDFLink'; // Set type
@@ -1725,7 +1725,7 @@ export class MJCFAdapter {
                     mesh.name = collision.name || 'collision';
 
                     // Create collision body container (similar to URDF handling)
-                    const colliderGroup = new THREE.Group();
+                    const colliderGroup: any = new THREE.Group();
                     colliderGroup.name = `${name}_collider_${linkCollisionCount}`;
                     colliderGroup.isURDFCollider = true; // Mark as collision body
                     colliderGroup.add(mesh);
@@ -1761,12 +1761,13 @@ export class MJCFAdapter {
             parentGroup.add(linkGroup);
 
             // Find all joints with this link as parent
-            const childJoints = Array.from(model.joints.values()).filter(
+            const allJoints = Array.from(model.joints.values()) as any[];
+            const childJoints = allJoints.filter(
                 j => j.parent === linkName && j.child
             );
 
             // Process child joints and child bodies
-            childJoints.forEach(joint => {
+            childJoints.forEach((joint: any) => {
                 const childLinkName = joint.child;
                 if (!childLinkName) return;
 
@@ -1775,7 +1776,7 @@ export class MJCFAdapter {
                 const bodyOrigin = childLink.userData.bodyOrigin || { xyz: [0, 0, 0], rpy: [0, 0, 0] };
 
                 // Create joint transformation group
-                const jointGroup = new THREE.Group();
+                const jointGroup: any = new THREE.Group();
                 jointGroup.name = joint.name || `joint_${childLinkName}`;
                 jointGroup.isURDFJoint = true; // Mark as joint for JointDragControls recognition
                 jointGroup.type = 'URDFJoint'; // Set type
@@ -1798,7 +1799,7 @@ export class MJCFAdapter {
                     bodyOrigin.xyz[1] + joint.origin.xyz[1],
                     bodyOrigin.xyz[2] + joint.origin.xyz[2]
                 );
-                jointGroup.rotation.set(...bodyOrigin.rpy);
+                jointGroup.rotation.set(bodyOrigin.rpy[0], bodyOrigin.rpy[1], bodyOrigin.rpy[2]);
 
                 // Recursively build child link
                 buildHierarchy(childLinkName, jointGroup);
@@ -1811,12 +1812,13 @@ export class MJCFAdapter {
             for (const [childName, bodyData] of bodyMap.entries()) {
                 if (bodyData.parentName === linkName) {
                     // Check if joint connection already exists
-                    const hasJoint = Array.from(model.joints.values()).some(
+                    const allJoints2 = Array.from(model.joints.values()) as any[];
+                    const hasJoint = allJoints2.some(
                         j => j.parent === linkName && j.child === childName
                     );
                     if (!hasJoint) {
                         // If no joint, create fixed connection group to apply body position and rotation
-                        const childLink = model.links.get(childName);
+                        const childLink: any = model.links.get(childName);
                         const childBodyOrigin = childLink.userData.bodyOrigin || { xyz: [0, 0, 0], rpy: [0, 0, 0] };
 
                         // Mark this as fixed-connected child body (for structure graph display)
@@ -1824,8 +1826,8 @@ export class MJCFAdapter {
 
                         // Create fixed connection group
                         const fixedGroup = new THREE.Group();
-                        fixedGroup.position.set(...childBodyOrigin.xyz);
-                        fixedGroup.rotation.set(...childBodyOrigin.rpy);
+                        fixedGroup.position.set(childBodyOrigin.xyz[0], childBodyOrigin.xyz[1], childBodyOrigin.xyz[2]);
+                        fixedGroup.rotation.set(childBodyOrigin.rpy[0], childBodyOrigin.rpy[1], childBodyOrigin.rpy[2]);
 
                         // Recursively build child body and add to fixed group
                         buildHierarchy(childName, fixedGroup);

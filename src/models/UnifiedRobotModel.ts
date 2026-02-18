@@ -95,7 +95,7 @@ export class GeometryType {
     size: any = null;
     filename: string | null = null;
     meshScale: number[] | null = null;
-    fromto: number[] | null = null;
+    fromto: any = null;
     inlineVertices: boolean | null = null;
     inlineScale: number[] | null = null;
 
@@ -108,7 +108,7 @@ export class GeometryType {
         cloned.size = this.size ? { ...this.size } : null;
         cloned.filename = this.filename;
         cloned.meshScale = this.meshScale ? [...this.meshScale] : null;
-        cloned.fromto = this.fromto ? [...this.fromto] : null;
+        cloned.fromto = this.fromto;
         cloned.inlineVertices = this.inlineVertices;
         cloned.inlineScale = this.inlineScale ? [...this.inlineScale] : null;
         return cloned;
@@ -127,7 +127,7 @@ export class InertialProperties {
     ixy: number = 0;
     ixz: number = 0;
     iyz: number = 0;
-    diagonalInertia: number[] | null = null;
+    diagonalInertia: any = null;
 }
 
 /**
