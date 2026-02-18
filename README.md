@@ -14,7 +14,7 @@
 
 **Robot Viewer** is a web-based 3D viewer for robot models and scenes. Built on top of [Three.js](https://threejs.org/), it provides an intuitive interface for visualizing, editing, and simulating robots directly in the browser without any installation required.
 
-**Live Demo**: http://viewer.robotsfan.com/
+**Live Demo**: http://viewer.osaerialrobot.top/
 
 ## Key Features
 
