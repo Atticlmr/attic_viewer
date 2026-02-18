@@ -4,6 +4,9 @@
  */
 
 export class FileTreeView {
+    availableModels: any[];
+    onFileClick: any;
+
     constructor() {
         this.availableModels = [];
         this.onFileClick = null;
