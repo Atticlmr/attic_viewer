@@ -2,6 +2,10 @@
 
 ---
 
+[中文 README](./README_ZH.md)
+
+---
+
 # Robot Viewer
 
 [![Version](https://img.shields.io/badge/version-v1.2.0-blue.svg)](https://github.com/Atticlmr/robot_viewer)
@@ -10,11 +14,13 @@
 [![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6.svg)](https://github.com/Atticlmr/robot_viewer)
 [![Three.js](https://img.shields.io/badge/Three.js-0.163.0-black.svg)](https://threejs.org/)
 [![Vite](https://img.shields.io/badge/Vite-4.5.0-646cff.svg)](https://vitejs.dev/)
-[![Demo](https://img.shields.io/badge/Demo-Live-brightgreen.svg)](http://viewer.robotsfan.com/)
+[![Demo](https://img.shields.io/badge/Demo-Live-brightgreen.svg)](http://viewer.osaerialrobot.top/)
 
 **Robot Viewer** is a web-based 3D viewer for robot models and scenes. Built on top of [Three.js](https://threejs.org/), it provides an intuitive interface for visualizing, editing, and simulating robots directly in the browser without any installation required.
 
 **Live Demo**: http://viewer.osaerialrobot.top/
+
+> 📝 This is a fork of [fan-ziqi/robot_viewer](https://github.com/fan-ziqi/robot_viewer), rewritten in **TypeScript**.
 
 ## Key Features
 
@@ -88,7 +94,7 @@ robot_viewer/
 
 ## TypeScript Migration
 
-The project has been migrated from JavaScript to TypeScript:
+This project has been migrated from JavaScript to TypeScript:
 
 - **Status**: ~91% type errors resolved
 - **Build**: Passing ✓
@@ -100,8 +106,8 @@ Some type errors remain (primarily DOM element type inference), but these do not
 
 ## Branches
 
-- `main` - Stable release branch
-- `dev` - Development branch with latest changes
+- `main` - Stable release branch (from original repo)
+- `dev` - Development branch with TypeScript rewrite
 
 ## Contributing
 
