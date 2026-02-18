@@ -77,8 +77,8 @@ export class AppState {
 
         if (model.joints) {
             summary.hasJoints = model.joints.size > 0;
-            summary.controllableJoints = Array.from(model.joints.values())
-                .filter(j => j.type !== 'fixed').length;
+            summary.controllableJoints = Array.from(model.joints.values() as any[])
+                .filter((j: any) => j.type !== 'fixed').length;
         }
 
         if (model.constraints) {

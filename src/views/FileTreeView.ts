@@ -143,7 +143,8 @@ export class FileTreeView {
         }
 
         input.addEventListener('change', (e) => {
-            const files = Array.from(e.target.files);
+            const target = e.target as HTMLInputElement;
+            const files = Array.from(target.files || []);
             if (files && files.length > 0) {
                 // Create a drag event and dispatch it
                 const dt = new DataTransfer();
@@ -303,8 +304,9 @@ export class FileTreeView {
 
             parts.forEach((part, index) => {
                 if (index === parts.length - 1) {
-                    if (!current.__files) current.__files = [];
-                    current.__files.push({
+                    const currentAny = current as any;
+                    if (!currentAny.__files) currentAny.__files = [];
+                    currentAny.__files.push({
                         name: part,
                         file: file,
                         path: path,

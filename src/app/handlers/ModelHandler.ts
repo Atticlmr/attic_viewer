@@ -1,6 +1,8 @@
 /**
  * Model Handler - Handles model loading and UI updates
  */
+import * as d3 from 'd3';
+
 export class ModelHandler {
     app: any;
 
@@ -283,7 +285,7 @@ export class ModelHandler {
      * Create loading snapshot
      */
     async createLoadingSnapshot() {
-        const canvas = document.getElementById('canvas');
+        const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
         if (!canvas) return null;
 
         try {
@@ -406,8 +408,8 @@ export class ModelHandler {
         }
 
         if (model.joints) {
-            const controllableJoints = Array.from(model.joints.values())
-                .filter(j => j.type !== 'fixed').length;
+            const controllableJoints = Array.from(model.joints.values() as any[])
+                .filter((j: any) => j.type !== 'fixed').length;
             info += `Joints: ${model.joints.size} (${controllableJoints} controllable)<br>`;
         }
 

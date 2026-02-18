@@ -155,7 +155,7 @@ export class HighlightManager {
                             // Add emissive for glow effect (convert to Phong for emissive)
                         });
                         // For basic material, we'll brighten the color slightly
-                        const hsl = {};
+                        const hsl = { h: 0, s: 0, l: 0 };
                         obj.material.color.getHSL(hsl);
                         obj.material.color.setHSL(hsl.h, hsl.s, Math.min(hsl.l + 0.3, 1.0));
                     }

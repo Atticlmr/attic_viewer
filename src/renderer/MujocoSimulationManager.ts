@@ -249,7 +249,7 @@ export class MujocoSimulationManager {
         const texturedir = compilerEl?.getAttribute('texturedir') || meshdir;
 
         // Parse all asset references
-        const assetPaths = new Set();
+        const assetPaths = new Set<string>();
         const meshAssetMap = new Map(); // Map from resolved path to original mesh element
 
         // Parse mesh files
@@ -564,7 +564,7 @@ export class MujocoSimulationManager {
             }
 
             // Create geometry
-            let geometry = new THREE.SphereGeometry(size[0]);
+            let geometry: THREE.BufferGeometry = new THREE.SphereGeometry(size[0]);
 
             if (type == this.mujoco.mjtGeom.mjGEOM_SPHERE.value) {
                 geometry = new THREE.SphereGeometry(size[0], 32, 32);
@@ -907,7 +907,7 @@ export class MujocoSimulationManager {
             const mesh = new THREE.Mesh(geometry, finalMaterial);
             mesh.castShadow = group !== 3;  // Collision geoms don't cast shadows
             mesh.receiveShadow = group !== 3;
-            mesh.bodyID = b;
+            (mesh as any).bodyID = b;
 
             // Mark collision geom and set initial visibility
             if (group === 3) {

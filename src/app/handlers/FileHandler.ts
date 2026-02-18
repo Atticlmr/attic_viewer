@@ -82,13 +82,13 @@ export class FileHandler {
             }
 
             // Use VSCode adapter if available
-            if (typeof vscodeAdapter !== 'undefined') {
-                vscodeAdapter.log(`Model loaded successfully: ${fileInfo.name}`);
+            if (typeof window.vscodeAdapter !== 'undefined') {
+                window.vscodeAdapter.log(`Model loaded successfully: ${fileInfo.name}`);
             }
         } catch (error) {
             console.error('Failed to load model from VSCode:', error);
-            if (typeof vscodeAdapter !== 'undefined') {
-                vscodeAdapter.showError(`Failed to load model: ${error.message}`);
+            if (typeof window.vscodeAdapter !== 'undefined') {
+                window.vscodeAdapter.showError(`Failed to load model: ${error.message}`);
             }
         }
     }

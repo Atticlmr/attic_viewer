@@ -12,6 +12,7 @@ export class CodeEditorManager {
     onSaveAs: any;
     fileMap: any;
     _reloadingInProgress: boolean;
+    updateControlsVisibility: (() => void) | undefined;
 
     constructor() {
         this.codeEditorInstance = null;
@@ -58,8 +59,8 @@ export class CodeEditorManager {
      * Setup filename input
      */
     setupFileControls() {
-        const filenameInput = document.getElementById('editor-filename-input');
-        const filenameDisplay = document.getElementById('editor-filename');
+        const filenameInput = document.getElementById('editor-filename-input') as HTMLInputElement | null;
+        const filenameDisplay = document.getElementById('editor-filename') as HTMLElement | null;
 
         if (!filenameInput || !filenameDisplay) return;
 
@@ -82,7 +83,8 @@ export class CodeEditorManager {
 
         // Listen for filename input
         filenameInput.addEventListener('input', (e) => {
-            this.editorState.defaultFileName = e.target.value.trim() || 'newfile.xml';
+            const target = e.target as HTMLInputElement;
+            this.editorState.defaultFileName = target.value.trim() || 'newfile.xml';
         });
 
         // Store update function for later use
@@ -176,7 +178,7 @@ export class CodeEditorManager {
                         fileType = this.editorState.currentFile.type;
                     } else {
                         // If no file, get filename from input, infer type from extension
-                        const filenameInput = document.getElementById('editor-filename-input');
+                        const filenameInput = document.getElementById('editor-filename-input') as HTMLInputElement | null;
 
                         if (filenameInput) {
                             fileName = filenameInput.value.trim() || this.editorState.defaultFileName;

@@ -11,6 +11,7 @@ export class FileHandler {
     availableModels: any[];
     currentModelFile: any;
     onModelLoaded: any;
+    onFilesLoaded: ((files: any[]) => void) | null;
     usdViewerManager: any;
     usdViewerInitializer: any;
 
@@ -19,6 +20,7 @@ export class FileHandler {
         this.availableModels = [];
         this.currentModelFile = null;
         this.onModelLoaded = null; // Callback function
+        this.onFilesLoaded = null; // Callback for when files are loaded
         this.usdViewerManager = null; // USD viewer manager (lazy loaded)
     }
 
@@ -124,8 +126,8 @@ export class FileHandler {
     /**
      * Process file system entries
      */
-    async processEntries(entries) {
-        const files = [];
+    async processEntries(entries: any[]) {
+        const files: File[] = [];
 
         for (const entry of entries) {
             if (entry.isFile) {
@@ -159,8 +161,8 @@ export class FileHandler {
     /**
      * Recursively read directory
      */
-    async readDirectory(dirEntry) {
-        const files = [];
+    async readDirectory(dirEntry): Promise<File[]> {
+        const files: File[] = [];
 
         return new Promise((resolve, reject) => {
             const reader = dirEntry.createReader();
@@ -424,7 +426,7 @@ export class FileHandler {
      * Create loading snapshot
      */
     createLoadingSnapshot() {
-        const canvas = document.getElementById('canvas');
+        const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
         if (!canvas) return null;
 
         try {

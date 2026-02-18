@@ -44,6 +44,7 @@ export class SceneManager {
     dragControls: any;
     onMeasurementUpdate: any;
     meshCoordinateAxes: any;
+    meshWireframe: any;
 
     constructor(canvas: any) {
         this.canvas = canvas;
@@ -232,7 +233,7 @@ export class SceneManager {
             this.world.add(model.threeObject);
 
             // Read and apply current coordinate system setting
-            const upSelect = document.getElementById('up-select');
+            const upSelect = document.getElementById('up-select') as HTMLSelectElement | null;
             if (upSelect) {
                 this.setUp(upSelect.value || '+Z');
             }
@@ -616,12 +617,12 @@ export class SceneManager {
             this.constraintManager.applyConstraints(model, joint);
 
             // Update corresponding slider (if exists)
-            const slider = document.querySelector(`input[data-joint="${joint.name}"]`);
+            const slider = document.querySelector(`input[data-joint="${joint.name}"]`) as HTMLInputElement | null;
             if (slider) {
-                slider.value = angle;
+                slider.value = String(angle);
 
                 // Update input box
-                const valueInput = document.querySelector(`input[data-joint-input="${joint.name}"]`);
+                const valueInput = document.querySelector(`input[data-joint-input="${joint.name}"]`) as HTMLInputElement | null;
                 if (valueInput) {
                     const angleUnit = document.querySelector('#unit-deg.active') ? 'deg' : 'rad';
                     if (angleUnit === 'deg') {

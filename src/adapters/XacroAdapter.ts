@@ -115,7 +115,7 @@ export class XacroAdapter {
 
             // Now use existing URDF loading infrastructure
             // Import URDFLoader dynamically
-            const urdfModule = await import('urdf-loader');
+            const urdfModule = await import('urdf-loader') as any;
             const URDFLoader: any = urdfModule.URDFLoader || urdfModule.default || urdfModule;
 
             return new Promise((resolve, reject) => {

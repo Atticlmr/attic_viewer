@@ -8,7 +8,6 @@ export class USDViewerManager {
     iframe: any;
     isReady: boolean;
     messageHandlers: any;
-    handleMessage: any;
 
     constructor(container: any) {
         this.container = container;
@@ -16,8 +15,7 @@ export class USDViewerManager {
         this.isReady = false;
         this.messageHandlers = new Map();
 
-        this.handleMessage = this.handleMessage.bind(this);
-        window.addEventListener('message', this.handleMessage);
+        window.addEventListener('message', this.handleMessage.bind(this));
     }
 
     /**
@@ -33,12 +31,12 @@ export class USDViewerManager {
             }, 30000);
 
             // Listen for IFRAME_READY
-            const readyHandler = (event) => {
+            const readyHandler = (event: any) => {
                 if (event.data?.type === 'IFRAME_READY') {
                     clearTimeout(timeout);
                     this.messageHandlers.delete('IFRAME_READY');
                     this.isReady = true;
-                    resolve();
+                    resolve(undefined);
                 }
             };
 
@@ -107,13 +105,13 @@ export class USDViewerManager {
     /**
      * Load USD from file
      */
-    async loadFromFile(file) {
+    async loadFromFile(file: File) {
         await this.initialize();
 
         const buffer = await file.arrayBuffer();
         const entries = [{ path: file.name, buffer }];
 
-        return new Promise((resolve, reject) => {
+        return new Promise<void>((resolve, reject) => {
             const timeout = setTimeout(() => reject(new Error('Load timeout')), 60000);
 
             const loadedHandler = () => {
@@ -130,7 +128,7 @@ export class USDViewerManager {
     /**
      * Load from file map
      */
-    async loadFromFilesMap(filesMap, primaryPath) {
+    async loadFromFilesMap(filesMap: Record<string, File>, primaryPath: string) {
         await this.initialize();
 
         const entries = [];
@@ -144,7 +142,7 @@ export class USDViewerManager {
             }
         }
 
-        return new Promise((resolve, reject) => {
+        return new Promise<void>((resolve, reject) => {
             const timeout = setTimeout(() => reject(new Error('Load timeout')), 60000);
 
             const loadedHandler = () => {

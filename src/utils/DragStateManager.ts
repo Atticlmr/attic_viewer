@@ -228,7 +228,7 @@ export class DragStateManager {
                 this.move(evt.clientX, evt.clientY);
             }
         } else if (evt.type === 'pointerup') {
-            this.end(evt);
+            this.end();
         }
     }
 }

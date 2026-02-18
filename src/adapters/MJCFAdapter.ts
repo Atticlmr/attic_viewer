@@ -504,6 +504,12 @@ export class MJCFAdapter {
                     defaults.joint = {};
                 }
 
+                // Parse type (slide, hinge, free, ball)
+                const jointType = jointEl.getAttribute('type');
+                if (jointType) {
+                    defaults.joint.type = jointType;
+                }
+
                 // Parse axis (if axis defined, completely replace parent axis)
                 const axis = jointEl.getAttribute('axis');
                 if (axis) {
@@ -1253,7 +1259,30 @@ export class MJCFAdapter {
 
         joints.forEach(jointEl => {
             const jointName = jointEl.getAttribute('name') || `joint_${model.joints.size}`;
-            const jointType = jointEl.getAttribute('type') || 'hinge';
+
+            // [Important] Parse joint type, consider class inheritance
+            let jointType = jointEl.getAttribute('type');
+
+            // If not directly defined, try to inherit from class or childclass
+            if (!jointType) {
+                const currentBody = jointEl.parentElement;
+                let className = jointEl.getAttribute('class');
+
+                // If joint has no class, check parent body's childclass
+                if (!className && currentBody) {
+                    className = currentBody.getAttribute('childclass');
+                }
+
+                if (className && defaultsMap) {
+                    const defaults = defaultsMap.get(className);
+                    if (defaults && defaults.joint && defaults.joint.type) {
+                        jointType = defaults.joint.type;
+                    }
+                }
+            }
+
+            // Default to hinge if still not found
+            jointType = jointType || 'hinge';
 
             // Map MJCF joint types to URDF types
             let urdfType = 'revolute';
@@ -2061,25 +2090,30 @@ export class MJCFAdapter {
                 // Update matrix
                 joint.threeObject.updateMatrixWorld(true);
             } else if (joint.type === 'prismatic') {
-                // Use axis stored on threeObject (already converted) or convert from joint.axis
+                // Get axis in joint's local coordinate system
                 let axis;
                 if (joint.threeObject.axis) {
                     axis = joint.threeObject.axis.clone().normalize();
                 } else if (joint.axis && joint.axis.xyz) {
-                    // If no pre-stored axis, need coordinate system conversion
                     const mjcfAxis = joint.axis.xyz;
-                    axis = new THREE.Vector3(mjcfAxis[0], mjcfAxis[2], -mjcfAxis[1]).normalize();
+                    axis = new THREE.Vector3(mjcfAxis[0], mjcfAxis[1], mjcfAxis[2]).normalize();
                 } else {
                     console.warn('Joint has no axis definition:', joint.name);
                     return;
                 }
+
+                // Convert axis from body local space to jointGroup local space
+                // The axis was defined in body local space, but jointGroup has rotation (bodyOrigin.rpy)
+                // We need to apply jointGroup's own rotation to convert the axis
+                const jointRotation = joint.threeObject.quaternion.clone();
+                axis.applyQuaternion(jointRotation);
 
                 // Save initial position (only save on first call)
                 if (!joint.threeObject.userData.initialPosition) {
                     joint.threeObject.userData.initialPosition = joint.threeObject.position.clone();
                 }
 
-                // Translate joint: initial position + move along axis
+                // Translate joint: initial position + move along axis (in jointGroup's local space)
                 joint.threeObject.position.copy(joint.threeObject.userData.initialPosition);
                 joint.threeObject.position.addScaledVector(axis, angle);
 

@@ -147,10 +147,11 @@ export class UIController {
         }
 
         // Coordinate system direction toggle
-        const upSelect = document.getElementById('up-select');
+        const upSelect = document.getElementById('up-select') as HTMLSelectElement | null;
         if (upSelect) {
             upSelect.addEventListener('change', (e) => {
-                this.sceneManager.setUp(e.target.value);
+                const target = e.target as HTMLSelectElement;
+                this.sceneManager.setUp(target.value);
             });
         }
 
@@ -517,7 +518,7 @@ export class UIController {
     /**
      * Setup all buttons and panels
      */
-    setupAll(callbacks = {}) {
+    setupAll(callbacks: any = {}) {
         // Save all callbacks (before setupControlPanel)
         this.onAngleUnitChanged = callbacks.onAngleUnitChanged;
         this.onIgnoreLimitsChanged = callbacks.onIgnoreLimitsChanged;

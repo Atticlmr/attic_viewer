@@ -2,6 +2,9 @@
  * 国际化工具 - 支持中文和英文
  */
 
+// Declare global __APP_VERSION__ that will be replaced at build time
+declare const __APP_VERSION__: string;
+
 // 获取版本号（构建时会替换为实际版本号）
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0';
 
@@ -266,7 +269,7 @@ class I18n {
      * 检测浏览器语言
      */
     detectBrowserLanguage() {
-        const lang = navigator.language || navigator.userLanguage;
+        const lang = navigator.language || (navigator as any).userLanguage;
         // 如果浏览器语言是中文（包括zh, zh-CN, zh-TW等），返回zh-CN
         if (lang.toLowerCase().startsWith('zh')) {
             return 'zh-CN';
@@ -312,7 +315,7 @@ class I18n {
 
             // 如果是input或textarea，更新placeholder
             if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
-                element.placeholder = text;
+                (element as HTMLInputElement).placeholder = text;
             } else {
                 // 如果包含HTML标签（如<br>），使用innerHTML
                 if (text.includes('<br>') || text.includes('<strong>')) {

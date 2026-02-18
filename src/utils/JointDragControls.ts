@@ -433,6 +433,7 @@ export class PointerJointDragControls extends JointDragControls {
     _mouseDown: any;
     _mouseMove: any;
     _mouseUp: any;
+    _mouseLeave: any;
 
     constructor(scene: any, camera: any, domElement: any, model: any) {
         super(scene, camera, domElement, model);
@@ -489,14 +490,14 @@ export class PointerJointDragControls extends JointDragControls {
 
             // Filter out collision meshes (but allow invisible visual meshes for interaction)
             const validIntersections = intersections.filter(intersect => {
-                const obj = intersect.object;
+                const obj = intersect.object as any;
                 // Skip collision meshes
                 if (obj.isURDFCollider || obj.userData?.isCollision || obj.userData?.isCollisionGeom) {
                     return false;
                 }
                 // Check if object is in collision hierarchy
                 let isInCollider = false;
-                let checkNode = obj;
+                let checkNode: any = obj;
                 while (checkNode) {
                     if (checkNode.isURDFCollider) {
                         isInCollider = true;

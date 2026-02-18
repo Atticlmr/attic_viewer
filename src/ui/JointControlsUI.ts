@@ -174,16 +174,16 @@ export class JointControlsUI {
             upper = Math.PI;
         }
 
-        const slider = document.createElement('input');
+        const slider = document.createElement('input') as HTMLInputElement;
         slider.type = 'range';
         slider.className = 'joint-slider';
         slider.setAttribute('data-joint', joint.name);
-        slider.min = lower;
-        slider.max = upper;
+        slider.min = String(lower);
+        slider.max = String(upper);
 
         let initialValue = joint.currentValue !== undefined ? joint.currentValue : (lower + upper) / 2;
-        slider.value = initialValue;
-        slider.step = (upper - lower) / 1000;
+        slider.value = String(initialValue);
+        slider.step = String((upper - lower) / 1000);
 
         // Editable lower limit label
         const minLabel = document.createElement('input');
@@ -251,8 +251,8 @@ export class JointControlsUI {
                 return;
             }
 
-            slider.min = valueInRad;
-            slider.step = (slider.max - slider.min) / 1000;
+            slider.min = String(valueInRad);
+            slider.step = String((parseFloat(slider.max) - parseFloat(slider.min)) / 1000);
 
             // Update limits in model
             if (joint.limits) {
@@ -265,7 +265,7 @@ export class JointControlsUI {
             // If current value exceeds new limit, adjust to within limit
             const currentValue = parseFloat(slider.value);
             if (currentValue < valueInRad) {
-                slider.value = valueInRad;
+                slider.value = String(valueInRad);
                 ModelLoaderFactory.setJointAngle(model, joint.name, valueInRad);
                 joint.currentValue = valueInRad;
                 updateValueInput();
@@ -299,8 +299,8 @@ export class JointControlsUI {
                 return;
             }
 
-            slider.max = valueInRad;
-            slider.step = (slider.max - slider.min) / 1000;
+            slider.max = String(valueInRad);
+            slider.step = String((parseFloat(slider.max) - parseFloat(slider.min)) / 1000);
 
             // Update limits in model
             if (joint.limits) {
@@ -313,7 +313,7 @@ export class JointControlsUI {
             // If current value exceeds new limit, adjust to within limit
             const currentValue = parseFloat(slider.value);
             if (currentValue > valueInRad) {
-                slider.value = valueInRad;
+                slider.value = String(valueInRad);
                 ModelLoaderFactory.setJointAngle(model, joint.name, valueInRad);
                 joint.currentValue = valueInRad;
                 updateValueInput();
@@ -487,8 +487,9 @@ export class JointControlsUI {
                 this.sceneManager.constraintManager.applyConstraints(model, joint);
             }
 
-            if (!slider._pendingRender) {
-                slider._pendingRender = true;
+            const sliderAny = slider as any;
+            if (!sliderAny._pendingRender) {
+                sliderAny._pendingRender = true;
                 requestAnimationFrame(() => {
                     this.sceneManager.redraw();
                     this.sceneManager.render();
@@ -498,7 +499,7 @@ export class JointControlsUI {
                         this.sceneManager.onMeasurementUpdate();
                     }
 
-                    slider._pendingRender = false;
+                    sliderAny._pendingRender = false;
                 });
             }
         });
@@ -519,7 +520,7 @@ export class JointControlsUI {
             const currentMax = parseFloat(slider.max);
             valueInRad = Math.max(currentMin, Math.min(currentMax, valueInRad));
 
-            slider.value = valueInRad;
+            slider.value = String(valueInRad);
             ModelLoaderFactory.setJointAngle(model, joint.name, valueInRad);
             joint.currentValue = valueInRad;
 
@@ -539,7 +540,7 @@ export class JointControlsUI {
         });
 
         // Save update function
-        div._updateDisplay = () => {
+        (div as any)._updateDisplay = () => {
             updateValueInput();
             updateLabels();
             valueUnit.textContent = this.angleUnit === 'deg' ? '°' : 'rad';
@@ -555,8 +556,8 @@ export class JointControlsUI {
         this.angleUnit = unit;
         const controls = document.querySelectorAll('.joint-control');
         controls.forEach(control => {
-            if (control._updateDisplay) {
-                control._updateDisplay();
+            if ((control as any)._updateDisplay) {
+                (control as any)._updateDisplay();
             }
         });
     }
@@ -584,12 +585,12 @@ export class JointControlsUI {
 
                 joint.currentValue = initialValue;
 
-                const slider = document.querySelector(`input[data-joint="${name}"]`);
+                const slider = document.querySelector(`input[data-joint="${name}"]`) as HTMLInputElement | null;
                 if (slider) {
-                    slider.value = initialValue;
-                    const control = slider.closest('.joint-control');
-                    if (control && control._updateDisplay) {
-                        control._updateDisplay();
+                    slider.value = String(initialValue);
+                    const control = slider.closest('.joint-control') as HTMLDivElement | null;
+                    if (control && (control as any)._updateDisplay) {
+                        (control as any)._updateDisplay();
                     }
                 }
             }
@@ -609,33 +610,34 @@ export class JointControlsUI {
     updateAllSliderLimits(model, ignoreLimits) {
         if (!model) return;
 
-        document.querySelectorAll('.joint-slider').forEach(slider => {
+        document.querySelectorAll('.joint-slider').forEach(sliderEl => {
+            const slider = sliderEl as HTMLInputElement;
             const jointName = slider.getAttribute('data-joint');
             const joint = model.joints.get(jointName);
 
             if (joint && joint.type !== 'fixed') {
                 if (ignoreLimits) {
-                    slider.min = -Math.PI * 2;
-                    slider.max = Math.PI * 2;
-                    slider.step = 0.01;
+                    slider.min = String(-Math.PI * 2);
+                    slider.max = String(Math.PI * 2);
+                    slider.step = '0.01';
                 } else {
                     const limits = joint.limits || {};
                     const lower = limits.lower !== undefined ? limits.lower : -Math.PI;
                     const upper = limits.upper !== undefined ? limits.upper : Math.PI;
 
                     if (joint.type === 'continuous') {
-                        slider.min = -Math.PI;
-                        slider.max = Math.PI;
+                        slider.min = String(-Math.PI);
+                        slider.max = String(Math.PI);
                     } else {
-                        slider.min = lower;
-                        slider.max = upper;
+                        slider.min = String(lower);
+                        slider.max = String(upper);
                     }
-                    slider.step = (slider.max - slider.min) / 1000;
+                    slider.step = String((parseFloat(slider.max) - parseFloat(slider.min)) / 1000);
                 }
 
-                const control = slider.closest('.joint-control');
-                if (control && control._updateDisplay) {
-                    control._updateDisplay();
+                const control = slider.closest('.joint-control') as HTMLDivElement | null;
+                if (control && (control as any)._updateDisplay) {
+                    (control as any)._updateDisplay();
                 }
             }
         });

@@ -32,11 +32,11 @@ export class MeasurementController {
 
                 if (firstObj.type === 'joint') {
                     svg.selectAll('.graph-joint-group')
-                        .filter(d => d.target?.data?.jointName === firstObj.name)
+                        .filter((d: any) => d.target?.data?.jointName === firstObj.name)
                         .classed('measurement-selected', false);
                 } else if (firstObj.type === 'link') {
                     svg.selectAll('.graph-node')
-                        .filter(d => d.data?.data?.name === firstObj.name)
+                        .filter((d: any) => d.data?.data?.name === firstObj.name)
                         .classed('measurement-selected', false);
                 }
             }

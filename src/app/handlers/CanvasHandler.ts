@@ -1,6 +1,9 @@
 /**
  * Canvas Handler - Handles canvas click events
  */
+import * as THREE from 'three';
+import * as d3 from 'd3';
+
 export class CanvasHandler {
     app: any;
 
@@ -42,11 +45,11 @@ export class CanvasHandler {
      * Handle canvas click
      */
     handleCanvasClick(canvas, event) {
-        // Dynamically import THREE to avoid issues in test environment
+        // Use imported THREE or window.THREE as fallback
         const THREE = window.THREE || require('three');
         if (!THREE) return;
 
-        const Raycaster = THREE.Raycaster || window.THREE?.Raycaster;
+        const Raycaster = THREE.Raycaster;
         if (!Raycaster) return;
 
         const raycaster = new Raycaster();

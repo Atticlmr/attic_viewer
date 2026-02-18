@@ -1,6 +1,8 @@
 /**
  * Model Tree Handler - Handles model tree panel events
  */
+import * as d3 from 'd3';
+
 export class ModelTreeHandler {
     app: any;
 
@@ -23,7 +25,7 @@ export class ModelTreeHandler {
         if (floatingPanel) {
             // Click blank area to deselect
             floatingPanel.addEventListener('click', (event) => {
-                const target = event.target;
+                const target = event.target as HTMLElement;
 
                 if (target === floatingPanel ||
                     target.classList?.contains('graph-controls-hint') ||

@@ -161,15 +161,15 @@ export class ModelGraphView {
             .enter()
             .append('path')
             .attr('class', 'graph-link')
-            .attr('d', d3.linkVertical()
-                .x(d => d.x + 50)
-                .y(d => d.y + 50)
+            .attr('d', d3.linkVertical<any, any>()
+                .x((d: any) => d.x + 50)
+                .y((d: any) => d.y + 50)
             );
 
         // Draw joint nodes (on connection lines)
         const jointGroup = container.append('g').attr('class', 'joint-nodes');
         const joints = jointGroup.selectAll('g')
-            .data(hierarchy.links().filter(link => link.target.data.jointName))
+            .data(hierarchy.links().filter((link: any) => link.target.data?.jointName))
             .enter()
             .append('g')
             .attr('class', 'graph-joint-group')
@@ -194,7 +194,7 @@ export class ModelGraphView {
                 .style('font-weight', '500')
                 .style('fill', nodeColors.text)
                 .style('user-select', 'none')
-                .text(d.target.data.jointName);
+                .text((d: any) => d.target.data?.jointName);
 
             // Second line: joint type
             const typeText = jointGroup.append('text')
@@ -206,7 +206,7 @@ export class ModelGraphView {
                 .style('fill', nodeColors.text)
                 .style('opacity', 0.7)
                 .style('user-select', 'none')
-                .text(d.target.data.jointType || 'joint');
+                .text((d: any) => d.target.data?.jointType || 'joint');
 
             // Calculate maximum width of two lines of text
             const nameBBox = nameText.node().getBBox();
@@ -248,11 +248,12 @@ export class ModelGraphView {
         // Joint click event
         joints.on('click', (event, d) => {
             event.stopPropagation();
+            const dAny = d as any;
 
-            if (!d.target.data.jointName) return;
+            if (!dAny.target.data?.jointName) return;
 
             // Get joint object from model
-            const joint = model.joints.get(d.target.data.jointName);
+            const joint = model.joints.get(dAny.target.data?.jointName);
             if (!joint) return;
 
             // Check if Ctrl key is pressed (measurement mode)
@@ -283,8 +284,8 @@ export class ModelGraphView {
                 }
 
                 // Jump to joint definition in code editor
-                if (this.codeEditorManager && d.target.data.jointName) {
-                    this.codeEditorManager.scrollToJoint(d.target.data.jointName);
+                if (this.codeEditorManager && (d as any).target.data?.jointName) {
+                    this.codeEditorManager.scrollToJoint((d as any).target.data?.jointName);
                 }
             }
         });
@@ -310,7 +311,7 @@ export class ModelGraphView {
 
         // Add tooltip
         joints.append('title')
-            .text(d => `${d.target.data.jointName} (${d.target.data.jointType || 'joint'})`);
+            .text((d: any) => `${d.target.data?.jointName} (${d.target.data?.jointType || 'joint'})`);
 
         // Draw nodes
         const nodeGroup = container.append('g').attr('class', 'nodes');
@@ -333,7 +334,8 @@ export class ModelGraphView {
 
         node.each(function() {
             const nodeGroup = d3.select(this);
-            const textElement = nodeGroup.select('text').node();
+            const textElement = nodeGroup.select('text').node() as SVGGraphicsElement | null;
+            if (!textElement) return;
             const textBBox = textElement.getBBox();
             const paddingX = 28;
             const paddingY = 10;
@@ -599,8 +601,8 @@ export class ModelGraphView {
             if (joint.parent === linkName && joint.child) {
                 const childNode = this.buildHierarchy(joint.child, model);
                 if (childNode) {
-                    childNode.jointName = jointName;
-                    childNode.jointType = joint.type;
+                    (childNode as any).jointName = jointName;
+                    (childNode as any).jointType = joint.type;
                     node.children.push(childNode);
                 }
             }
@@ -613,9 +615,9 @@ export class ModelGraphView {
             if (!alreadyAdded && childLink.userData.parentName === linkName) {
                 const childNode = this.buildHierarchy(childName, model);
                 if (childNode) {
-                    childNode.jointName = null; // Fixed connection, no joint
-                    childNode.jointType = 'fixed';
-                    childNode.isFixedConnection = true; // Mark as fixed connection
+                    (childNode as any).jointName = null; // Fixed connection, no joint
+                    (childNode as any).jointType = 'fixed';
+                    (childNode as any).isFixedConnection = true; // Mark as fixed connection
                     node.children.push(childNode);
                 }
             }
@@ -629,11 +631,11 @@ export class ModelGraphView {
      */
     setupDocumentClickHandler() {
         // Remove previously existing listener first to avoid duplicate binding
-        if (window.graphClickHandler) {
-            document.removeEventListener('click', window.graphClickHandler, true);
+        if ((window as any).graphClickHandler) {
+            document.removeEventListener('click', (window as any).graphClickHandler, true);
         }
 
-        window.graphClickHandler = (event) => {
+        (window as any).graphClickHandler = (event: Event) => {
             // Check if clicked element is within model structure graph
             const floatingPanel = document.getElementById('floating-model-tree');
             if (!floatingPanel || floatingPanel.style.display === 'none') {
@@ -641,18 +643,19 @@ export class ModelGraphView {
             }
 
             // Check if click is within panel
-            if (!floatingPanel.contains(event.target)) {
+            const target = event.target as Node;
+            if (!floatingPanel.contains(target)) {
                 return; // Click outside panel, don't process
             }
 
             // Check click target
-            const target = event.target;
-            const tagName = target.tagName.toLowerCase();
+            const targetEl = target as Element;
+            const tagName = targetEl.tagName.toLowerCase();
 
             // Check if clicked node, joint label, or other interactive element
-            const isNode = target.closest('.graph-node');
-            const isJoint = target.closest('.graph-joint-group');
-            const isHeader = target.closest('.floating-panel-header');
+            const isNode = targetEl.closest('.graph-node');
+            const isJoint = targetEl.closest('.graph-joint-group');
+            const isHeader = targetEl.closest('.floating-panel-header');
 
             // If not clicking node or joint, clear selection and measurement
             if (!isNode && !isJoint && !isHeader) {
@@ -675,7 +678,7 @@ export class ModelGraphView {
         };
 
         // Use capture phase to ensure event is captured
-        document.addEventListener('click', window.graphClickHandler, true);
+        document.addEventListener('click', (window as any).graphClickHandler, true);
     }
 
     /**

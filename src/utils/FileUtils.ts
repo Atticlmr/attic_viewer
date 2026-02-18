@@ -17,7 +17,7 @@ export function readFileContent(file) {
 /**
  * Get File object from file system entry
  */
-export function getFileFromEntry(entry) {
+export function getFileFromEntry(entry: any): Promise<File> {
     return new Promise((resolve, reject) => {
         entry.file(resolve, reject);
     });
@@ -26,14 +26,14 @@ export function getFileFromEntry(entry) {
 /**
  * Recursively read directory
  */
-export async function readDirectory(dirEntry, fileMap) {
-    const files = [];
+export async function readDirectory(dirEntry: any, fileMap: any): Promise<File[]> {
+    const files: File[] = [];
 
     return new Promise((resolve, reject) => {
         const reader = dirEntry.createReader();
 
         function readEntries() {
-            reader.readEntries(async (entries) => {
+            reader.readEntries(async (entries: any[]) => {
                 if (entries.length === 0) {
                     resolve(files);
                     return;
