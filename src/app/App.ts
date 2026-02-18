@@ -140,7 +140,6 @@ export class App {
             // Initialize file handler
             this.fileHandler = new FileHandlerController();
             this.fileHandler.setupFileDrop();
-            this.fileHandler.setupReloadButton();
 
             // Set USD viewer lazy loading
             this.fileHandler.setUSDViewerInitializer(async () => {
