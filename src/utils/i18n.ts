@@ -255,6 +255,8 @@ export const translations = {
 };
 
 class I18n {
+    currentLang: string = 'zh-CN';
+
     constructor() {
         // 检测浏览器语言
         const browserLang = this.detectBrowserLanguage();
