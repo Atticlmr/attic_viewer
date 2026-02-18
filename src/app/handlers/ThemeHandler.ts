@@ -2,7 +2,9 @@
  * Theme Handler - Handles theme change events
  */
 export class ThemeHandler {
-    constructor(app) {
+    app: any;
+
+    constructor(app: any) {
         this.app = app;
     }
 
