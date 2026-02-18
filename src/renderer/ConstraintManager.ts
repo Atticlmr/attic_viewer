@@ -276,7 +276,10 @@ export class ConstraintManager {
         }
         // Use iterative method to solve connect constraints
         model.constraints.forEach((constraint) => {
-            if (constraint.type === 'connect') {                this.solveConnectConstraint(model, constraint);
+            if (constraint.type === 'connect') {
+                this.solveConnectConstraint(model, constraint);
+            } else if (constraint.type === 'joint') {
+                this.solveJointConstraint(model, constraint, changedJoint);
             }
         });
     }
@@ -390,7 +393,103 @@ export class ConstraintManager {
         body1.localToWorld(pos1);
         pos2.set(anchor[0], anchor[1], anchor[2]);
         body2.localToWorld(pos2);
-        const finalError = pos1.distanceTo(pos2);    }
+        const finalError = pos1.distanceTo(pos2);
+    }
+
+    /**
+     * Solve joint constraint (joint coupling constraint)
+     * Synchronizes two joints based on polycoef coefficients
+     * Default polycoef [0, 1] means: joint1 = joint2
+     */
+    solveJointConstraint(model, constraint, changedJoint) {
+        const joint1 = model.getJoint(constraint.joint1);
+        const joint2 = model.getJoint(constraint.joint2);
+
+        if (!joint1 || !joint2) {
+            return;
+        }
+
+        // Get polycoef coefficients (default [0, 1] means 1:1 relationship)
+        // polycoef format: [c0, c1, c2, c3, c4, c5, ...]
+        // For simple case: c0 + c1*q1 = c4 + c5*q2
+        // Default [0, 1] means: q1 = q2
+        let polycoef = constraint.polycoef || [0, 1];
+
+        // For panda hand-like grippers: when both joints are slide joints with the same axis
+        // and have the same parent, they typically move in opposite directions (gripper behavior)
+        // Check if we should invert the relationship
+        const shouldInvert = this.shouldInvertJointRelation(joint1, joint2, model);
+        if (shouldInvert && polycoef[1] === 1 && (polycoef[5] === undefined || polycoef[5] === 1)) {
+            polycoef = [0, 1, 0, 0, 0, -1];
+        }
+
+        const c1 = polycoef[1] !== undefined ? polycoef[1] : 1;
+        const c5 = polycoef[5] !== undefined ? polycoef[5] : 1;
+
+        // Determine which joint was changed
+        let sourceJoint: any;
+        let targetJoint: any;
+        let coefficient: number;
+
+        if (changedJoint && changedJoint.name === constraint.joint1) {
+            sourceJoint = joint1;
+            targetJoint = joint2;
+            // Solve: c1 * q1 = c5 * q2 => q2 = (c1 / c5) * q1
+            coefficient = c1 / c5;
+        } else if (changedJoint && changedJoint.name === constraint.joint2) {
+            sourceJoint = joint2;
+            targetJoint = joint1;
+            // Solve: c1 * q1 = c5 * q2 => q1 = (c5 / c1) * q2
+            coefficient = c5 / c1;
+        } else {
+            // No changed joint specified, skip
+            return;
+        }
+
+        // Calculate new angle for target joint
+        const sourceAngle = sourceJoint.currentValue || 0;
+        let targetAngle = sourceAngle * coefficient;
+
+        // Apply limits if available
+        if (targetJoint.limits) {
+            targetAngle = Math.max(targetJoint.limits.lower, Math.min(targetJoint.limits.upper, targetAngle));
+        }
+
+        // Set the target joint angle
+        ModelLoaderFactory.setJointAngle(model, targetJoint.name, targetAngle);
+        targetJoint.currentValue = targetAngle;
+
+        // Update corresponding slider (if exists)
+        const slider = document.querySelector(`input[data-joint="${targetJoint.name}"]`) as HTMLInputElement | null;
+        if (slider) {
+            slider.value = String(targetAngle);
+            const valueInput = document.querySelector(`input[data-joint-input="${targetJoint.name}"]`) as HTMLInputElement | null;
+            if (valueInput) {
+                // Check if target joint is a prismatic (slide) joint - use linear units instead of angular
+                if (targetJoint.type === 'prismatic' || targetJoint.type === 'slide') {
+                    // Prismatic joints use linear units (meters), not angles
+                    valueInput.value = targetAngle.toFixed(4);
+                } else {
+                    // Revolute joints use angular units
+                    const angleUnit = document.querySelector('#unit-deg.active') ? 'deg' : 'rad';
+                    valueInput.value = angleUnit === 'deg'
+                        ? (targetAngle * 180 / Math.PI).toFixed(2)
+                        : targetAngle.toFixed(2);
+                }
+            }
+        }
+
+        model.threeObject.updateMatrixWorld(true);
+    }
+
+    /**
+     * Determine if two joints should have inverted relationship (opposite directions)
+     * Based on MJCF equality constraint: default polycoef=[0,1] means joint1 = joint2 (same direction)
+     */
+    shouldInvertJointRelation(joint1: any, joint2: any, model: any): boolean {
+        // Default behavior: don't invert (joint1 = joint2 per MJCF spec)
+        return false;
+    }
 
     /**
      * Find all joints affecting specified body
