@@ -6,6 +6,13 @@ import * as THREE from 'three';
 export class UIController {
     sceneManager: any;
     angleUnit: string;
+    onThemeChanged: any;
+    onAngleUnitChanged: any;
+    onIgnoreLimitsChanged: any;
+    onLanguageChanged: any;
+    onResetJoints: any;
+    onMujocoReset: any;
+    onMujocoToggleSimulate: any;
 
     constructor(sceneManager: any) {
         this.sceneManager = sceneManager;
