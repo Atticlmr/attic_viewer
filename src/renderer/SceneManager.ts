@@ -15,7 +15,32 @@ import { MeasurementManager } from './MeasurementManager.js';
  * Delegates specialized tasks to dedicated managers
  */
 export class SceneManager {
-    constructor(canvas) {
+    canvas: any;
+    scene: any;
+    _dirty: boolean;
+    _pendingRender: boolean;
+    _renderingPaused: boolean;
+    _eventListeners: any;
+    camera: any;
+    renderer: any;
+    controls: any;
+    environmentManager: any;
+    groundPlane: any;
+    referenceGrid: any;
+    directionalLight: any;
+    ambientLight: any;
+    fillLight: any;
+    visualizationManager: any;
+    inertialVisualization: any;
+    constraintManager: any;
+    axesManager: any;
+    highlightManager: any;
+    measurementManager: any;
+    currentModel: any;
+    ignoreLimits: boolean;
+    dragControls: any;
+
+    constructor(canvas: any) {
         this.canvas = canvas;
         this.scene = new THREE.Scene();
 

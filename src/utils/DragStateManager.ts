@@ -5,7 +5,28 @@
 import * as THREE from 'three';
 
 export class DragStateManager {
-    constructor(scene, renderer, camera, container, controls) {
+    scene: any;
+    renderer: any;
+    camera: any;
+    mousePos: any;
+    raycaster: any;
+    grabDistance: number;
+    active: boolean;
+    physicsObject: any;
+    controls: any;
+    arrow: any;
+    previouslySelected: any;
+    highlightColor: number;
+    originalEmissive: any;
+    localHit: any;
+    worldHit: any;
+    currentWorld: any;
+    enabled: boolean;
+    container: any;
+    boundOnPointer: any;
+    mouseDown: boolean;
+
+    constructor(scene: any, renderer: any, camera: any, container: any, controls: any) {
         this.scene = scene;
         this.renderer = renderer;
         this.camera = camera;
