@@ -82,7 +82,7 @@ export const translations = {
         'dropHint': '拖拽机器人模型文件或文件夹到页面任意位置',
         'dropHintSub': '支持 URDF, Xacro, MJCF 格式<br>支持拖拽文件夹以加载mesh文件',
         'graphHint': '拖动: 移动 | 滚轮: 缩放 | 右键: 隐藏/显示 | Ctrl+左键: 测量',
-        'copyright': '© 2025 范子琦 版权所有。',
+        'copyright': '© 2025 范子琦, Atticlmr 版权所有。',
 
         // 模型信息
         'type': '类型',
@@ -205,7 +205,7 @@ export const translations = {
         'dropHint': 'Drag and drop robot model files or folders anywhere',
         'dropHintSub': 'Supports URDF, Xacro, MJCF formats<br>Supports folder dragging to load mesh files',
         'graphHint': 'Drag: Move | Scroll: Zoom | Right-click: Hide/Show | Ctrl+Click: Measure',
-        'copyright': '© 2025 Ziqi Fan. All rights reserved.',
+        'copyright': '© 2025 Ziqi Fan, Atticlmr. All rights reserved.',
 
         // Model info
         'type': 'Type',
