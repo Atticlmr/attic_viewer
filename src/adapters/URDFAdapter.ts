@@ -33,7 +33,7 @@ export class URDFAdapter {
         }
 
         // Convert links
-        Object.values(robot.links).forEach(urdfLink => {
+        Object.values(robot.links as any).forEach((urdfLink: any) => {
             const link = this.convertLink(urdfLink);
 
             // If urdf-loader didn't parse inertial, get from XML

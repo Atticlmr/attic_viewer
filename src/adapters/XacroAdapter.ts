@@ -116,7 +116,7 @@ export class XacroAdapter {
             // Now use existing URDF loading infrastructure
             // Import URDFLoader dynamically
             const urdfModule = await import('urdf-loader');
-            const URDFLoader = urdfModule.URDFLoader || urdfModule.default || urdfModule;
+            const URDFLoader: any = urdfModule.URDFLoader || urdfModule.default || urdfModule;
 
             return new Promise((resolve, reject) => {
                 const loader = new URDFLoader();
@@ -131,8 +131,8 @@ export class XacroAdapter {
                     const packages = this.extractPackagesFromURDF(finalUrdfString);
 
                     // Build package map
-                    const packageMap = {};
-                    packages.forEach(pkg => {
+                    const packageMap: Record<string, string> = {};
+                    packages.forEach((pkg: string) => {
                         packageMap[pkg] = pkg;
                     });
                     packageMap[''] = '';
@@ -488,7 +488,7 @@ export class XacroAdapter {
                 case 'stl': {
                     const { STLLoader } = await import('three/examples/jsm/loaders/STLLoader.js');
                     const stlLoader = new STLLoader(manager);
-                    const stlGeometry = await new Promise((resolve, reject) => {
+                    const stlGeometry: any = await new Promise((resolve, reject) => {
                         stlLoader.load(blobUrl, resolve, undefined, reject);
                     });
                     const stlMaterial = new THREE.MeshPhongMaterial();
@@ -499,7 +499,7 @@ export class XacroAdapter {
                 case 'dae': {
                     const { ColladaLoader } = await import('three/examples/jsm/loaders/ColladaLoader.js');
                     const colladaLoader = new ColladaLoader(manager);
-                    const colladaModel = await new Promise((resolve, reject) => {
+                    const colladaModel: any = await new Promise((resolve, reject) => {
                         colladaLoader.load(blobUrl, resolve, undefined, reject);
                     });
                     meshObject = colladaModel.scene;
@@ -534,7 +534,7 @@ export class XacroAdapter {
                 case 'glb': {
                     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
                     const gltfLoader = new GLTFLoader(manager);
-                    const gltfModel = await new Promise((resolve, reject) => {
+                    const gltfModel: any = await new Promise((resolve, reject) => {
                         gltfLoader.load(blobUrl, resolve, undefined, reject);
                     });
                     meshObject = gltfModel.scene;
@@ -593,8 +593,8 @@ export class XacroAdapter {
      * @param {string} xacroContent - Xacro file content
      * @returns {Object} - Object with argument names as keys and default values
      */
-    static extractXacroArguments(xacroContent) {
-        const args = {};
+    static extractXacroArguments(xacroContent): Record<string, string> {
+        const args: Record<string, string> = {};
 
         // Match <xacro:arg name="NAME" default="VALUE"/>
         // Also match <arg name="NAME" default="VALUE"/> (without xacro: prefix)

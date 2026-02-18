@@ -15,7 +15,7 @@ export class USDAdapter {
      * @param {Object} options.usdViewerManager - USD viewer manager
      * @returns {Promise<UnifiedRobotModel>}
      */
-    static async parse(content, fileMap = null, file = null, options = {}) {
+    static async parse(content, fileMap = null, file = null, options: any = {}) {
         if (!options.usdViewerManager) {
             throw new Error('USD viewer not initialized');
         }
@@ -336,8 +336,8 @@ export class USDAdapter {
             link.visuals.forEach(visual => {
                 const mesh = this.createGeometryMesh(visual.geometry);
                 if (mesh) {
-                    mesh.position.set(...visual.origin.xyz);
-                    mesh.rotation.set(...visual.origin.rpy);
+                    mesh.position.set(visual.origin.xyz[0], visual.origin.xyz[1], visual.origin.xyz[2]);
+                    mesh.rotation.set(visual.origin.rpy[0], visual.origin.rpy[1], visual.origin.rpy[2]);
                     mesh.name = visual.name;
                     linkGroup.add(mesh);
                     visual.threeObject = mesh;
