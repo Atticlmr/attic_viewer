@@ -35,6 +35,34 @@ window.i18n = i18n;
  * Main Application Class
  */
 export class App {
+    // State
+    state: any;
+
+    // Managers
+    sceneManager: any;
+    uiController: any;
+    fileHandler: any;
+    jointControlsUI: any;
+    panelManager: any;
+    modelGraphView: any;
+    fileTreeView: any;
+    codeEditorManager: any;
+    measurementController: any;
+    usdViewerManager: any;
+    mujocoSimulationManager: any;
+
+    // Handlers
+    modelHandler: any;
+    fileHandlerModule: any;
+    themeHandler: any;
+    simulationHandler: any;
+    canvasHandler: any;
+    modelTreeHandler: any;
+    usdViewerHandler: any;
+
+    // VSCode file map
+    vscodeFileMap: any;
+
     constructor() {
         // State
         this.state = new AppState();
@@ -65,9 +93,6 @@ export class App {
         this.vscodeFileMap = new Map();
     }
 
-    /**
-     * Load model
-     */
     /**
      * Load model from VSCode extension
      * @param {Object} fileInfo - File info from VSCode {name, path, content, directory}
