@@ -1,6 +1,9 @@
 // Test setup file
 import { vi } from 'vitest';
 
+// Declare global for TypeScript
+declare const global: any;
+
 // Mock window and document objects for Node.js environment
 global.window = global.window || {};
 global.document = global.document || {
@@ -19,8 +22,8 @@ global.document = global.document || {
 };
 
 // Mock requestAnimationFrame
-global.requestAnimationFrame = (cb) => setTimeout(cb, 0);
-global.cancelAnimationFrame = (id) => clearTimeout(id);
+global.requestAnimationFrame = (cb: any) => setTimeout(cb, 0);
+global.cancelAnimationFrame = (id: any) => clearTimeout(id);
 
 // Mock performance.now
 if (typeof performance === 'undefined') {
