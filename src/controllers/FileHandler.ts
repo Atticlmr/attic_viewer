@@ -126,17 +126,19 @@ export class FileHandler {
     /**
      * Process file system entries
      */
-    async processEntries(entries: any[]) {
-        const files: File[] = [];
+    async processEntries(entries: any[], basePath = '') {
+        const files: Array<{ file: File; path: string }> = [];
 
         for (const entry of entries) {
             if (entry.isFile) {
                 const file = await getFileFromEntry(entry);
-                const path = entry.fullPath || entry.name;
+                // fullPath starts with '/', remove leading slash for relative path
+                const path = basePath + (entry.fullPath || entry.name).replace(/^\//, '');
                 this.fileMap.set(path, file);
-                files.push(file);
+                files.push({ file, path });
             } else if (entry.isDirectory) {
-                const dirFiles = await this.readDirectory(entry);
+                const dirPath = basePath + (entry.fullPath || entry.name).replace(/^\//, '');
+                const dirFiles = await this.readDirectory(entry, dirPath);
                 files.push(...dirFiles);
             }
         }
@@ -161,8 +163,8 @@ export class FileHandler {
     /**
      * Recursively read directory
      */
-    async readDirectory(dirEntry): Promise<File[]> {
-        const files: File[] = [];
+    async readDirectory(dirEntry, basePath = ''): Promise<Array<{ file: File; path: string }>> {
+        const files: Array<{ file: File; path: string }> = [];
 
         return new Promise((resolve, reject) => {
             const reader = dirEntry.createReader();
@@ -177,11 +179,13 @@ export class FileHandler {
                     for (const entry of entries) {
                         if (entry.isFile) {
                             const file = await getFileFromEntry(entry);
-                            const path = entry.fullPath || entry.name;
+                            // fullPath starts with '/', remove leading slash for relative path
+                            const path = basePath + '/' + (entry.fullPath || entry.name).replace(/^\//, '');
                             this.fileMap.set(path, file);
-                            files.push(file);
+                            files.push({ file, path });
                         } else if (entry.isDirectory) {
-                            const subFiles = await this.readDirectory(entry);
+                            const subDirPath = basePath + '/' + (entry.fullPath || entry.name).replace(/^\//, '');
+                            const subFiles = await this.readDirectory(entry, subDirPath);
                             files.push(...subFiles);
                         }
                     }
@@ -196,6 +200,7 @@ export class FileHandler {
 
     /**
      * Find all loadable files
+     * @param files - Array of File objects or {file, path} objects
      */
     async findAllLoadableFiles(files) {
         const supportedExtensions = {
@@ -204,7 +209,10 @@ export class FileHandler {
         };
         const loadableFiles = [];
 
-        const checkPromises = files.map(async (file) => {
+        const checkPromises = files.map(async (fileInput) => {
+            // Handle both File objects and {file, path} objects
+            const file = fileInput.file || fileInput;
+            const providedPath = fileInput.path;
             const ext = file.name.toLowerCase().split('.').pop();
 
             if (supportedExtensions.model.includes(ext)) {
@@ -221,7 +229,7 @@ export class FileHandler {
                             file: file,
                             name: file.name,
                             type: fileType,
-                            path: file.webkitRelativePath || file.name,
+                            path: providedPath || file.webkitRelativePath || file.name,
                             category: 'model'
                         };
                     } catch (error) {
@@ -234,7 +242,7 @@ export class FileHandler {
                         file: file,
                         name: file.name,
                         type: fileType,
-                        path: file.webkitRelativePath || file.name,
+                        path: providedPath || file.webkitRelativePath || file.name,
                         category: 'model'
                     };
                 }
@@ -243,7 +251,7 @@ export class FileHandler {
                     file: file,
                     name: file.name,
                     type: 'mesh',
-                    path: file.webkitRelativePath || file.name,
+                    path: providedPath || file.webkitRelativePath || file.name,
                     category: 'mesh'
                 };
             }
