@@ -103,7 +103,8 @@ export class FileHandler {
             const files = e.dataTransfer.files;
             if (files.length > 0) {
                 for (const file of files) {
-                    const path = file.webkitRelativePath || file.name;
+                    // Convert backslash to forward slash for cross-platform compatibility
+                    const path = (file.webkitRelativePath || file.name).replace(/\\/g, '/');
                     this.fileMap.set(path, file);
                     // Only add file.name as a separate key if there's no webkitRelativePath
                     // This prevents duplicate entries in the file tree
@@ -213,6 +214,8 @@ export class FileHandler {
             // Handle both File objects and {file, path} objects
             const file = fileInput.file || fileInput;
             const providedPath = fileInput.path;
+            // Convert backslash to forward slash for cross-platform compatibility
+            const webkitPath = (file.webkitRelativePath || '').replace(/\\/g, '/');
             const ext = file.name.toLowerCase().split('.').pop();
 
             if (supportedExtensions.model.includes(ext)) {
@@ -229,7 +232,7 @@ export class FileHandler {
                             file: file,
                             name: file.name,
                             type: fileType,
-                            path: providedPath || file.webkitRelativePath || file.name,
+                            path: providedPath || webkitPath || file.name,
                             category: 'model'
                         };
                     } catch (error) {
@@ -242,7 +245,7 @@ export class FileHandler {
                         file: file,
                         name: file.name,
                         type: fileType,
-                        path: providedPath || file.webkitRelativePath || file.name,
+                        path: providedPath || webkitPath || file.name,
                         category: 'model'
                     };
                 }
@@ -251,7 +254,7 @@ export class FileHandler {
                     file: file,
                     name: file.name,
                     type: 'mesh',
-                    path: providedPath || file.webkitRelativePath || file.name,
+                    path: providedPath || webkitPath || file.name,
                     category: 'mesh'
                 };
             }
