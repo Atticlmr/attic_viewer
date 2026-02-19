@@ -13,6 +13,7 @@ export class UIController {
     onResetJoints: any;
     onMujocoReset: any;
     onMujocoToggleSimulate: any;
+    onReloadFolder: any;
 
     constructor(sceneManager: any) {
         this.sceneManager = sceneManager;
@@ -525,6 +526,7 @@ export class UIController {
         this.onResetJoints = callbacks.onResetJoints;
         this.onMujocoReset = callbacks.onMujocoReset;
         this.onMujocoToggleSimulate = callbacks.onMujocoToggleSimulate;
+        this.onReloadFolder = callbacks.onReloadFolder;
 
         this.setupControlPanel();
         this.setupThemeToggle(callbacks.onThemeChanged);
@@ -534,6 +536,22 @@ export class UIController {
         this.setupJointAxesToggle();
         this.setupShadowToggle();
         this.setupLightingToggle();
+        this.setupReloadFolderButton();
+    }
+
+    /**
+     * Setup reload folder button
+     */
+    setupReloadFolderButton() {
+        const reloadBtn = document.getElementById('reload-folder-btn');
+        if (reloadBtn) {
+            reloadBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (this.onReloadFolder) {
+                    this.onReloadFolder();
+                }
+            });
+        }
     }
 
     /**

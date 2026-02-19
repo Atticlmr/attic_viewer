@@ -189,7 +189,8 @@ export class App {
                 onLanguageChanged: (lang) => this.handleLanguageChanged(lang),
                 onResetJoints: () => this.handleResetJoints(),
                 onMujocoReset: () => this.handleMujocoReset(),
-                onMujocoToggleSimulate: () => this.handleMujocoToggleSimulate()
+                onMujocoToggleSimulate: () => this.handleMujocoToggleSimulate(),
+                onReloadFolder: () => this.fileTreeView?.triggerFileLoad(true)
             });
 
             // Set measurement update callback
