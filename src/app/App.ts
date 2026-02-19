@@ -167,6 +167,24 @@ export class App {
             this.fileTreeView.onFileClick = (fileInfo) => {
                 this.handleFileClick(fileInfo);
             };
+            this.fileTreeView.onFilesSelected = async (files) => {
+                // Handle selected files directly using fileHandler
+                // This preserves webkitRelativePath information
+                this.fileHandler.fileMap.clear();
+                for (const file of files) {
+                    const path = (file.webkitRelativePath || file.name).replace(/\\/g, '/');
+                    this.fileHandler.fileMap.set(path, file);
+                    if (!file.webkitRelativePath) {
+                        this.fileHandler.fileMap.set(file.name, file);
+                    }
+                }
+                const loadableFiles = await this.fileHandler.findAllLoadableFiles(Array.from(files));
+                if (loadableFiles.length > 0) {
+                    this.fileHandler.availableModels = loadableFiles;
+                    this.fileHandler.onFilesLoaded?.(loadableFiles);
+                    await this.fileHandler.loadFileOrMesh(loadableFiles[0]);
+                }
+            };
 
             // Initialize file tree with empty state
             this.fileTreeView.updateFileTree([], new Map());

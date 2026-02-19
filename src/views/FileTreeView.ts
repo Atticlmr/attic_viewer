@@ -6,10 +6,12 @@
 export class FileTreeView {
     availableModels: any[];
     onFileClick: any;
+    onFilesSelected: any;
 
     constructor() {
         this.availableModels = [];
         this.onFileClick = null;
+        this.onFilesSelected = null;
     }
 
     /**
@@ -145,18 +147,10 @@ export class FileTreeView {
         input.addEventListener('change', (e) => {
             const target = e.target as HTMLInputElement;
             const files = Array.from(target.files || []);
-            if (files && files.length > 0) {
-                // Create a drag event and dispatch it
-                const dt = new DataTransfer();
-                files.forEach(file => dt.items.add(file));
-
-                const dropEvent = new DragEvent('drop', {
-                    bubbles: true,
-                    cancelable: true,
-                    dataTransfer: dt
-                });
-
-                document.body.dispatchEvent(dropEvent);
+            if (files && files.length > 0 && this.onFilesSelected) {
+                // Pass files directly to callback instead of simulating drop event
+                // This preserves webkitRelativePath information
+                this.onFilesSelected(files);
             }
             // Clean up
             document.body.removeChild(input);
