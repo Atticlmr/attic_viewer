@@ -4,15 +4,15 @@
 
 # Attic Viewer (机器人模型查看器)
 
-[![版本](https://img.shields.io/badge/version-v1.2.0-blue.svg)](https://github.com/Atticlmr/robot_viewer)
+[![版本](https://img.shields.io/badge/version-v1.2.0-blue.svg)](https://github.com/Atticlmr/attic_viewer)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-yellow.svg)](LICENSE)
-[![平台](https://img.shields.io/badge/platform-web-orange.svg)](https://github.com/Atticlmr/robot_viewer)
-[![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6.svg)](https://github.com/Atticlmr/robot_viewer)
+[![平台](https://img.shields.io/badge/platform-web-orange.svg)](https://github.com/Atticlmr/attic_viewer)
+[![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6.svg)](https://github.com/Atticlmr/attic_viewer)
 [![Three.js](https://img.shields.io/badge/Three.js-0.163.0-black.svg)](https://threejs.org/)
 [![Vite](https://img.shields.io/badge/Vite-4.5.0-646cff.svg)](https://vitejs.dev/)
 [![演示](https://img.shields.io/badge/Demo-Live-brightgreen.svg)](http://viewer.osaerialrobot.top/)
 
-**Robot Viewer** 是一个基于 Web 的 3D 机器人模型查看器。基于 [Three.js](https://threejs.org/) 构建，提供直观的界面，可直接在浏览器中查看、编辑和仿真机器人模型，无需安装任何软件。
+**Attic Viewer** 是一个基于 Web 的 3D 机器人模型查看器。基于 [Three.js](https://threejs.org/) 构建，提供直观的界面，可直接在浏览器中查看、编辑和仿真机器人模型，无需安装任何软件。
 
 **在线演示**: http://viewer.osaerialrobot.top/
 
@@ -26,13 +26,14 @@
 - **测量工具**: 测量关节和连杆之间的距离
 - **代码编辑器**: 内置 CodeMirror 编辑器，支持语法高亮
 - **物理仿真**: 集成 MuJoCo 引擎 (MJCF 模型)
+- **文件管理**: 拖放文件夹、重新加载文件夹、文件树导航
 
 ## 快速开始
 
 ```bash
 # 克隆仓库
-git clone https://github.com/Atticlmr/robot_viewer.git
-cd robot_viewer
+git clone https://github.com/Atticlmr/attic_viewer.git
+cd attic_viewer
 
 # 安装依赖
 pnpm install
@@ -65,7 +66,7 @@ pnpm typecheck
 ## 项目结构
 
 ```
-robot_viewer/
+attic_viewer/
 ├── src/
 │   ├── main.ts              # 应用入口
 │   ├── app/

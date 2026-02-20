@@ -2,21 +2,21 @@
 
 ---
 
-[中文 README](./README_ZH.md)
+[English README](./README.md)
 
 ---
 
 # Attic Viewer
 
-[![Version](https://img.shields.io/badge/version-v1.2.0-blue.svg)](https://github.com/Atticlmr/robot_viewer)
+[![Version](https://img.shields.io/badge/version-v1.2.0-blue.svg)](https://github.com/Atticlmr/attic_viewer)
 [![License](https://img.shields.io/badge/license-Apache--2.0-yellow.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-web-orange.svg)](https://github.com/Atticlmr/robot_viewer)
-[![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6.svg)](https://github.com/Atticlmr/robot_viewer)
+[![Platform](https://img.shields.io/badge/platform-web-orange.svg)](https://github.com/Atticlmr/attic_viewer)
+[![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6.svg)](https://github.com/Atticlmr/attic_viewer)
 [![Three.js](https://img.shields.io/badge/Three.js-0.163.0-black.svg)](https://threejs.org/)
 [![Vite](https://img.shields.io/badge/Vite-4.5.0-646cff.svg)](https://vitejs.dev/)
 [![Demo](https://img.shields.io/badge/Demo-Live-brightgreen.svg)](http://viewer.osaerialrobot.top/)
 
-**Robot Viewer** is a web-based 3D viewer for robot models and scenes. Built on top of [Three.js](https://threejs.org/), it provides an intuitive interface for visualizing, editing, and simulating robots directly in the browser without any installation required.
+**Attic Viewer** is a web-based 3D viewer for robot models and scenes. Built on top of [Three.js](https://threejs.org/), it provides an intuitive interface for visualizing, editing, and simulating robots directly in the browser without any installation required.
 
 **Live Demo**: http://viewer.osaerialrobot.top/
 
@@ -30,13 +30,14 @@
 - **Measurement Tools**: Measure distances between joints and links
 - **Code Editor**: Built-in CodeMirror editor with syntax highlighting
 - **Physics Simulation**: Integrated MuJoCo engine (MJCF models)
+- **File Management**: Drag & drop folders, reload folder, file tree navigation
 
 ## Getting Started
 
 ```bash
 # Clone the repository
-git clone https://github.com/Atticlmr/robot_viewer.git
-cd robot_viewer
+git clone https://github.com/Atticlmr/attic_viewer.git
+cd attic_viewer
 
 # Install dependencies
 pnpm install
@@ -69,7 +70,7 @@ pnpm typecheck
 ## Project Structure
 
 ```
-robot_viewer/
+attic_viewer/
 ├── src/
 │   ├── main.ts              # Application entry point
 │   ├── app/
