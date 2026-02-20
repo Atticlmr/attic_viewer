@@ -2,7 +2,7 @@
 
 ---
 
-[English README](./README.md)
+[中文README](./README_ZH.md)
 
 ---
 
@@ -29,8 +29,6 @@
 - **Interactive Controls**: Drag joints in real-time
 - **Measurement Tools**: Measure distances between joints and links
 - **Code Editor**: Built-in CodeMirror editor with syntax highlighting
-- **Physics Simulation**: Integrated MuJoCo engine (MJCF models)
-- **File Management**: Drag & drop folders, reload folder, file tree navigation
 
 ## Getting Started
 
