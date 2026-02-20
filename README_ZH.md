@@ -1,5 +1,6 @@
 ![screenshot](./docs/screenshot.png)
 
+[English README](./README.md)
 ---
 
 # Attic Viewer (机器人模型查看器)
@@ -22,11 +23,6 @@
 
 - **格式支持**: URDF, Xacro, MJCF, USD
 - **可视化**: 视觉/碰撞几何、惯性张量、质心、坐标系
-- **交互控制**: 实时拖动关节
-- **测量工具**: 测量关节和连杆之间的距离
-- **代码编辑器**: 内置 CodeMirror 编辑器，支持语法高亮
-- **物理仿真**: 集成 MuJoCo 引擎 (MJCF 模型)
-- **文件管理**: 拖放文件夹、重新加载文件夹、文件树导航
 
 ## 快速开始
 
@@ -116,4 +112,3 @@ Apache License 2.0 - 参见 [LICENSE](LICENSE) 文件。
 
 ---
 
-[English README](./README.md)
