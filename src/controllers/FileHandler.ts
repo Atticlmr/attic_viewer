@@ -134,12 +134,18 @@ export class FileHandler {
             if (entry.isFile) {
                 const file = await getFileFromEntry(entry);
                 // fullPath starts with '/', remove leading slash for relative path
-                const path = basePath + (entry.fullPath || entry.name).replace(/^\//, '');
-                this.fileMap.set(path, file);
-                files.push({ file, path });
+                const fullPath = entry.fullPath || entry.name;
+                const normalizedPath = basePath 
+                    ? `${basePath}/${fullPath.replace(/^\//, '')}`
+                    : fullPath.replace(/^\//, '');
+                this.fileMap.set(normalizedPath, file);
+                files.push({ file, path: normalizedPath });
             } else if (entry.isDirectory) {
-                const dirPath = basePath + (entry.fullPath || entry.name).replace(/^\//, '');
-                const dirFiles = await this.readDirectory(entry, dirPath);
+                const dirFullPath = entry.fullPath || entry.name;
+                const normalizedDirPath = basePath
+                    ? `${basePath}/${dirFullPath.replace(/^\//, '')}`
+                    : dirFullPath.replace(/^\//, '');
+                const dirFiles = await this.readDirectory(entry, normalizedDirPath);
                 files.push(...dirFiles);
             }
         }
@@ -180,13 +186,23 @@ export class FileHandler {
                     for (const entry of entries) {
                         if (entry.isFile) {
                             const file = await getFileFromEntry(entry);
-                            // fullPath starts with '/', remove leading slash for relative path
-                            const path = basePath + '/' + (entry.fullPath || entry.name).replace(/^\//, '');
-                            this.fileMap.set(path, file);
-                            files.push({ file, path });
+                            // Normalize path to prevent duplicates and ensure consistency
+                            const fullPath = entry.fullPath || entry.name;
+                            const normalizedPath = basePath
+                                ? `${basePath}/${fullPath.replace(/^\//, '')}`
+                                : fullPath.replace(/^\//, '');
+                            
+                            // Check for duplicates before adding
+                            if (!this.fileMap.has(normalizedPath)) {
+                                this.fileMap.set(normalizedPath, file);
+                                files.push({ file, path: normalizedPath });
+                            }
                         } else if (entry.isDirectory) {
-                            const subDirPath = basePath + '/' + (entry.fullPath || entry.name).replace(/^\//, '');
-                            const subFiles = await this.readDirectory(entry, subDirPath);
+                            const dirFullPath = entry.fullPath || entry.name;
+                            const normalizedDirPath = basePath
+                                ? `${basePath}/${dirFullPath.replace(/^\//, '')}`
+                                : dirFullPath.replace(/^\//, '');
+                            const subFiles = await this.readDirectory(entry, normalizedDirPath);
                             files.push(...subFiles);
                         }
                     }

@@ -7,6 +7,7 @@ export class FileTreeView {
     availableModels: any[];
     onFileClick: any;
     onFilesSelected: any;
+    private eventListeners: Array<{ element: Element; type: string; handler: EventListener }> = [];
 
     constructor() {
         this.availableModels = [];
@@ -15,9 +16,29 @@ export class FileTreeView {
     }
 
     /**
+     * Track event listener for cleanup
+     */
+    private addTrackedEventListener(element: Element, type: string, handler: EventListener) {
+        element.addEventListener(type, handler);
+        this.eventListeners.push({ element, type, handler });
+    }
+
+    /**
+     * Clear all tracked event listeners
+     */
+    private clearEventListeners() {
+        this.eventListeners.forEach(({ element, type, handler }) => {
+            element.removeEventListener(type, handler);
+        });
+        this.eventListeners = [];
+    }
+
+    /**
      * Update file tree
      */
     updateFileTree(files, fileMap, preserveState = false) {
+        this.clearEventListeners();
+        
         this.availableModels = files;
         const listContainer = document.getElementById('model-list');
         if (!listContainer) return;
@@ -96,7 +117,7 @@ export class FileTreeView {
             flex: 1;
         `;
         loadFilesButton.title = '选择单个或多个文件';
-        loadFilesButton.addEventListener('click', (e) => {
+        this.addTrackedEventListener(loadFilesButton, 'click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             this.triggerFileLoad(false);
@@ -115,7 +136,7 @@ export class FileTreeView {
             flex: 1;
         `;
         loadFolderButton.title = '选择整个文件夹';
-        loadFolderButton.addEventListener('click', (e) => {
+        this.addTrackedEventListener(loadFolderButton, 'click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             this.triggerFileLoad(true);
@@ -401,14 +422,15 @@ export class FileTreeView {
 
         files.forEach(fileInfo => {
             const item = this.createTreeItem(fileInfo.name, fileInfo.ext);
-            item.addEventListener('click', (e) => {
+            const clickHandler = (e) => {
                 e.stopPropagation();
                 document.querySelectorAll('.tree-item.selected').forEach(elem => {
                     elem.classList.remove('selected');
                 });
                 item.classList.add('selected');
                 this.onFileClick?.(fileInfo);
-            });
+            };
+            this.addTrackedEventListener(item, 'click', clickHandler);
             container.appendChild(item);
         });
     }
