@@ -13,6 +13,7 @@ import { ModelGraphView } from '../views/ModelGraphView.js';
 import { FileTreeView } from '../views/FileTreeView.js';
 import { CodeEditorManager } from '../controllers/CodeEditorManager.js';
 import { MeasurementController } from '../controllers/MeasurementController.js';
+import { ModelConversionController } from '../controllers/ModelConversionController.js';
 import { USDViewerManager } from '../renderer/USDViewerManager.js';
 import { MujocoSimulationManager } from '../renderer/MujocoSimulationManager.js';
 import { i18n } from '../utils/i18n.js';
@@ -48,6 +49,7 @@ export class App {
     fileTreeView: any;
     codeEditorManager: any;
     measurementController: any;
+    modelConversionController: any;
     usdViewerManager: any;
     mujocoSimulationManager: any;
 
@@ -77,6 +79,7 @@ export class App {
         this.fileTreeView = null;
         this.codeEditorManager = null;
         this.measurementController = null;
+        this.modelConversionController = null;
         this.usdViewerManager = null;
         this.mujocoSimulationManager = null;
 
@@ -208,7 +211,8 @@ export class App {
                 onResetJoints: () => this.handleResetJoints(),
                 onMujocoReset: () => this.handleMujocoReset(),
                 onMujocoToggleSimulate: () => this.handleMujocoToggleSimulate(),
-                onReloadFolder: () => this.fileTreeView?.triggerFileLoad(true)
+                onReloadFolder: () => this.fileTreeView?.triggerFileLoad(true),
+                onOpenConverterDialog: () => this.modelConversionController?.openDialog()
             });
 
             // Set measurement update callback
@@ -277,6 +281,8 @@ export class App {
 
             // Initialize measurement controller
             this.measurementController = new MeasurementController(this.sceneManager);
+            this.modelConversionController = new ModelConversionController(this);
+            this.modelConversionController.init();
 
             if (this.modelGraphView) {
                 this.modelGraphView.setMeasurementController(this.measurementController);

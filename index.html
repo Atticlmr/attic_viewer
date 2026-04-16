@@ -686,6 +686,226 @@
             line-height: 1.5;
         }
 
+        .conversion-dialog {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: rgba(0, 0, 0, 0.52);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 2100;
+            opacity: 0;
+            transition: opacity 0.25s var(--spring);
+        }
+
+        .conversion-dialog.show {
+            display: flex;
+            opacity: 1;
+        }
+
+        .conversion-dialog-panel {
+            width: min(560px, 100%);
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px) saturate(150%);
+            -webkit-backdrop-filter: blur(20px) saturate(150%);
+            border: 0.5px solid var(--glass-border);
+            border-radius: 20px;
+            box-shadow: var(--glass-shadow);
+            overflow: hidden;
+            transform: translateY(8px) scale(0.98);
+            transition: transform 0.25s var(--spring);
+        }
+
+        .conversion-dialog.show .conversion-dialog-panel {
+            transform: translateY(0) scale(1);
+        }
+
+        .conversion-dialog-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 20px 22px;
+            border-bottom: 0.5px solid var(--glass-border);
+        }
+
+        .conversion-dialog-title {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .conversion-dialog-title h3 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .conversion-dialog-title p {
+            margin: 0;
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--text-secondary);
+        }
+
+        .conversion-dialog-close {
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s var(--spring);
+        }
+
+        .conversion-dialog-close:hover {
+            background: rgba(255, 255, 255, 0.12);
+            color: var(--text-primary);
+        }
+
+        .conversion-dialog-body {
+            padding: 22px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .conversion-dialog-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+
+        .conversion-dialog-field {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .conversion-dialog-field label {
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-tertiary);
+        }
+
+        .conversion-dialog-select,
+        .conversion-dialog-path {
+            width: 100%;
+            min-height: 46px;
+            padding: 0 14px;
+            border-radius: 12px;
+            border: 0.5px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .conversion-dialog-path {
+            display: flex;
+            align-items: center;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .conversion-dialog-select:focus,
+        .conversion-dialog-path:focus {
+            outline: none;
+            border-color: rgba(10, 132, 255, 0.45);
+        }
+
+        .conversion-dialog-path-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+        }
+
+        .conversion-dialog-path-btn,
+        .conversion-dialog-action {
+            min-height: 44px;
+            border: none;
+            border-radius: 12px;
+            padding: 0 16px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s var(--spring);
+        }
+
+        .conversion-dialog-path-btn {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-primary);
+            border: 0.5px solid var(--glass-border);
+        }
+
+        .conversion-dialog-path-btn:hover {
+            background: rgba(255, 255, 255, 0.14);
+        }
+
+        .conversion-dialog-note {
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: rgba(10, 132, 255, 0.08);
+            border: 0.5px solid rgba(10, 132, 255, 0.14);
+            color: var(--text-secondary);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .conversion-dialog-status {
+            min-height: 22px;
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--text-secondary);
+        }
+
+        .conversion-dialog-status.success {
+            color: #4ade80;
+        }
+
+        .conversion-dialog-status.warning {
+            color: #fbbf24;
+        }
+
+        .conversion-dialog-status.error {
+            color: #ff6b6b;
+        }
+
+        .conversion-dialog-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 18px 22px 22px;
+            border-top: 0.5px solid var(--glass-border);
+        }
+
+        .conversion-dialog-action.secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-primary);
+            border: 0.5px solid var(--glass-border);
+        }
+
+        .conversion-dialog-action.primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .conversion-dialog-action.primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .conversion-dialog-action[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .example-urls {
             display: flex;
             flex-direction: column;
@@ -3002,6 +3222,9 @@
                     <button class="tool-button" id="open-editor-btn">
                         <span class="tool-button-text" data-i18n="edit"></span>
                     </button>
+                    <button class="tool-button" id="open-converter-page-btn">
+                        <span class="tool-button-text" data-i18n="converter"></span>
+                    </button>
                 </div>
 
                 <div class="control-bar-divider"></div>
@@ -3195,6 +3418,47 @@
     </div>
 
     <div id="copyright-watermark" data-i18n="copyright">
+    </div>
+
+    <div id="conversion-export-dialog" class="conversion-dialog">
+        <div class="conversion-dialog-panel">
+            <div class="conversion-dialog-header">
+                <div class="conversion-dialog-title">
+                    <h3>导出格式转换</h3>
+                    <p>直接基于当前查看器里已加载的模型进行转换导出。支持选择目标格式和导出位置。</p>
+                </div>
+                <button class="conversion-dialog-close" id="conversion-dialog-close-btn" type="button">✕</button>
+            </div>
+            <div class="conversion-dialog-body">
+                <div class="conversion-dialog-grid">
+                    <div class="conversion-dialog-field">
+                        <label for="conversion-dialog-format">目标格式</label>
+                        <select id="conversion-dialog-format" class="conversion-dialog-select">
+                            <option value="mjcf">MJCF (.xml)</option>
+                            <option value="urdf">URDF (.urdf)</option>
+                        </select>
+                    </div>
+
+                    <div class="conversion-dialog-field">
+                        <label for="conversion-dialog-path">导出位置</label>
+                        <div class="conversion-dialog-path-row">
+                            <input id="conversion-dialog-path" class="conversion-dialog-path" type="text" readonly placeholder="尚未选择导出目录">
+                            <button id="conversion-dialog-path-btn" class="conversion-dialog-path-btn" type="button">选择路径</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="conversion-dialog-note">
+                    导出时会始终生成一个 ZIP 包，里面包含目标模型文件以及相关 assets 资源。
+                </div>
+
+                <div id="conversion-dialog-status" class="conversion-dialog-status"></div>
+            </div>
+            <div class="conversion-dialog-footer">
+                <button id="conversion-dialog-cancel-btn" class="conversion-dialog-action secondary" type="button">取消</button>
+                <button id="conversion-dialog-export-btn" class="conversion-dialog-action primary" type="button">开始导出</button>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

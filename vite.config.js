@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { readFileSync } from 'fs';
+import { resolve } from 'path';
 
 // Read package.json to get version number
 const packageJson = JSON.parse(readFileSync('./package.json', 'utf-8'));
@@ -65,6 +66,9 @@ export default defineConfig({
     assetsDir: 'assets',
     // Code splitting optimization
     rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html')
+      },
       output: {
         // Manual chunking strategy
         manualChunks: {
@@ -137,4 +141,3 @@ export default defineConfig({
   },
   clearScreen: false
 });
-

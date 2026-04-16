@@ -14,6 +14,7 @@ export class UIController {
     onMujocoReset: any;
     onMujocoToggleSimulate: any;
     onReloadFolder: any;
+    onOpenConverterDialog: any;
 
     constructor(sceneManager: any) {
         this.sceneManager = sceneManager;
@@ -517,6 +518,18 @@ export class UIController {
     }
 
     /**
+     * Setup conversion dialog trigger
+     */
+    setupConversionTrigger() {
+        const converterPageBtn = document.getElementById('open-converter-page-btn');
+        if (converterPageBtn) {
+            converterPageBtn.addEventListener('click', () => {
+                this.onOpenConverterDialog?.();
+            });
+        }
+    }
+
+    /**
      * Setup all buttons and panels
      */
     setupAll(callbacks: any = {}) {
@@ -527,6 +540,7 @@ export class UIController {
         this.onMujocoReset = callbacks.onMujocoReset;
         this.onMujocoToggleSimulate = callbacks.onMujocoToggleSimulate;
         this.onReloadFolder = callbacks.onReloadFolder;
+        this.onOpenConverterDialog = callbacks.onOpenConverterDialog;
 
         this.setupControlPanel();
         this.setupThemeToggle(callbacks.onThemeChanged);
@@ -536,6 +550,7 @@ export class UIController {
         this.setupJointAxesToggle();
         this.setupShadowToggle();
         this.setupLightingToggle();
+        this.setupConversionTrigger();
         this.setupReloadFolderButton();
     }
 
@@ -561,4 +576,3 @@ export class UIController {
         return this.angleUnit;
     }
 }
-

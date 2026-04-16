@@ -23,6 +23,7 @@ export const translations = {
         'joints': '关节',
         'structure': '结构',
         'edit': '编辑',
+        'converter': '转换',
         'help': '帮助',
         'theme': '主题',
         'language': '语言',
@@ -145,6 +146,7 @@ export const translations = {
         'joints': 'Joints',
         'structure': 'Structure',
         'edit': 'Edit',
+        'converter': 'Convert',
         'help': 'Help',
         'theme': 'Theme',
         'language': 'Language',
@@ -340,5 +342,4 @@ class I18n {
 
 // 创建全局实例
 export const i18n = new I18n();
-
 
