@@ -22,6 +22,7 @@
 
 > 📝 This is a fork of [fan-ziqi/robot_viewer](https://github.com/fan-ziqi/robot_viewer), rewritten in **TypeScript**.
 
+> pre-release: https://atticlmr.github.io/attic_viewer/ support URDF2MJCF and MJCF2URDF, but need more feedback!
 ## Key Features
 
 - **Format Support**: URDF, Xacro, MJCF, USD
