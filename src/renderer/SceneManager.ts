@@ -9,44 +9,45 @@ import { ConstraintManager } from './ConstraintManager.js';
 import { CoordinateAxesManager } from './CoordinateAxesManager.js';
 import { HighlightManager } from './HighlightManager.js';
 import { MeasurementManager } from './MeasurementManager.js';
+import type { ViewerModel } from '../types/app.js';
 
 /**
  * SceneManager - Core scene management and coordination
  * Delegates specialized tasks to dedicated managers
  */
 export class SceneManager {
-    canvas: any;
-    scene: any;
+    canvas: HTMLCanvasElement;
+    scene: THREE.Scene;
     _dirty: boolean;
     _pendingRender: boolean;
     _renderingPaused: boolean;
-    _eventListeners: any;
-    _renderLoopId: any;
-    resizeObserver: any;
-    world: any;
-    camera: any;
-    renderer: any;
-    controls: any;
-    environmentManager: any;
-    groundPlane: any;
-    referenceGrid: any;
-    directionalLight: any;
-    ambientLight: any;
-    fillLight: any;
-    visualizationManager: any;
-    inertialVisualization: any;
-    constraintManager: any;
-    axesManager: any;
-    highlightManager: any;
-    measurementManager: any;
-    currentModel: any;
+    _eventListeners: Map<string, Set<(...args: unknown[]) => void>>;
+    _renderLoopId: number | null;
+    resizeObserver: ResizeObserver | null;
+    world: THREE.Object3D | null;
+    camera: THREE.PerspectiveCamera;
+    renderer: THREE.WebGLRenderer;
+    controls: OrbitControls;
+    environmentManager: EnvironmentManager;
+    groundPlane: THREE.Mesh | null;
+    referenceGrid: THREE.GridHelper | null;
+    directionalLight: THREE.DirectionalLight | undefined;
+    ambientLight: THREE.HemisphereLight | undefined;
+    fillLight: THREE.DirectionalLight | undefined;
+    visualizationManager: VisualizationManager;
+    inertialVisualization: InertialVisualization;
+    constraintManager: ConstraintManager;
+    axesManager: CoordinateAxesManager;
+    highlightManager: HighlightManager;
+    measurementManager: MeasurementManager;
+    currentModel: ViewerModel | null;
     ignoreLimits: boolean;
-    dragControls: any;
-    onMeasurementUpdate: any;
-    meshCoordinateAxes: any;
-    meshWireframe: any;
+    dragControls: PointerJointDragControls | null;
+    onMeasurementUpdate: (() => void) | null;
+    meshCoordinateAxes: THREE.Object3D | null;
+    meshWireframe: THREE.Object3D | null;
 
-    constructor(canvas: any) {
+    constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
         this.scene = new THREE.Scene();
 
@@ -56,7 +57,7 @@ export class SceneManager {
         this._renderingPaused = false;
 
         // Event system
-        this._eventListeners = {};
+        this._eventListeners = new Map();
 
         // Camera
         const width = canvas.clientWidth;
@@ -132,6 +133,9 @@ export class SceneManager {
 
         // Drag controls
         this.dragControls = null;
+        this.onMeasurementUpdate = null;
+        this.meshCoordinateAxes = null;
+        this.meshWireframe = null;
 
         // Window resize - use ResizeObserver to listen for canvas container size changes
         this.setupResizeObserver();
@@ -645,13 +649,13 @@ export class SceneManager {
         // Hover highlight callback (handle immediately, like urdf-loaders)
         this.dragControls.onHover = (link) => {
             if (link) {
-                this.highlightManager.highlightLink(link, this.currentModel);
+                this.highlightManager.highlightLink(link.linkData, this.currentModel);
             }
         };
 
         this.dragControls.onUnhover = (link) => {
             if (link) {
-                this.highlightManager.unhighlightLink(link, this.currentModel);
+                this.highlightManager.unhighlightLink(link.linkData, this.currentModel);
             }
         };
 

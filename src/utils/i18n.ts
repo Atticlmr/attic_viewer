@@ -257,21 +257,27 @@ export const translations = {
     }
 };
 
+type SupportedLanguage = keyof typeof translations;
+type TranslationKey = keyof typeof translations['zh-CN'];
+
 class I18n {
-    currentLang: string = 'zh-CN';
+    currentLang: SupportedLanguage = 'zh-CN';
 
     constructor() {
         // 检测浏览器语言
         const browserLang = this.detectBrowserLanguage();
         // 从localStorage读取语言设置，如果没有则使用浏览器语言
-        this.currentLang = localStorage.getItem('language') || browserLang;
+        const savedLanguage = localStorage.getItem('language');
+        this.currentLang = savedLanguage && savedLanguage in translations
+            ? savedLanguage as SupportedLanguage
+            : browserLang;
     }
 
     /**
      * 检测浏览器语言
      */
-    detectBrowserLanguage() {
-        const lang = navigator.language || (navigator as any).userLanguage;
+    detectBrowserLanguage(): SupportedLanguage {
+        const lang = navigator.language || navigator.userLanguage || 'zh-CN';
         // 如果浏览器语言是中文（包括zh, zh-CN, zh-TW等），返回zh-CN
         if (lang.toLowerCase().startsWith('zh')) {
             return 'zh-CN';
@@ -283,15 +289,15 @@ class I18n {
     /**
      * 获取翻译文本
      */
-    t(key) {
+    t(key: string): string {
         const lang = translations[this.currentLang] || translations['zh-CN'];
-        return lang[key] || key;
+        return lang[key as TranslationKey] || key;
     }
 
     /**
      * 切换语言
      */
-    setLanguage(lang) {
+    setLanguage(lang: SupportedLanguage): void {
         if (translations[lang]) {
             this.currentLang = lang;
             localStorage.setItem('language', lang);
@@ -302,14 +308,14 @@ class I18n {
     /**
      * 获取当前语言
      */
-    getCurrentLanguage() {
+    getCurrentLanguage(): SupportedLanguage {
         return this.currentLang;
     }
 
     /**
      * 更新页面上所有带有data-i18n属性的元素
      */
-    updatePageLanguage() {
+    updatePageLanguage(): void {
         // 更新所有带有data-i18n属性的元素
         document.querySelectorAll('[data-i18n]').forEach(element => {
             const key = element.getAttribute('data-i18n');
@@ -335,11 +341,10 @@ class I18n {
     /**
      * 初始化页面语言
      */
-    init() {
+    init(): void {
         this.updatePageLanguage();
     }
 }
 
 // 创建全局实例
 export const i18n = new I18n();
-

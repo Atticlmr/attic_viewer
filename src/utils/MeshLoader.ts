@@ -3,14 +3,31 @@
  * Unified management of STL, OBJ, DAE, GLTF and other format loading
  */
 import * as THREE from 'three';
+import type { Collada } from 'three/examples/jsm/loaders/ColladaLoader.js';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import type { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
+import type { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
+import type { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import type { ColladaLoader } from 'three/examples/jsm/loaders/ColladaLoader.js';
+import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+type ObjLoaderMaterials = Parameters<OBJLoader['setMaterials']>[0];
 
 // Cache loaders for performance
-let loadersCache = null;
+type MeshLoaders = {
+    STLLoader: STLLoader;
+    OBJLoader: OBJLoader;
+    MTLLoader: MTLLoader;
+    ColladaLoader: ColladaLoader;
+    GLTFLoader: GLTFLoader;
+};
+
+let loadersCache: MeshLoaders | null = null;
 
 /**
  * Get or create loaders instance (singleton pattern)
  */
-async function getLoaders() {
+async function getLoaders(): Promise<MeshLoaders> {
     if (!loadersCache) {
         const [
             { STLLoader },
@@ -39,7 +56,7 @@ async function getLoaders() {
 /**
  * Normalize path
  */
-function normalizePath(path) {
+function normalizePath(path: string): string {
     if (!path) return '';
     return path.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+/g, '/');
 }
@@ -50,14 +67,13 @@ function normalizePath(path) {
  * @param {Map} fileMap - File map
  * @returns {Promise<THREE.BufferGeometry|THREE.Group|null>}
  */
-export async function loadMeshFile(meshPath, fileMap) {
+export async function loadMeshFile(meshPath: string, fileMap: Map<string, File>): Promise<THREE.BufferGeometry | THREE.Object3D | null> {
     try {
         const normalizedPath = normalizePath(meshPath);
         const fileNameOnly = normalizedPath.split('/').pop();
         const baseName = fileNameOnly.split('.').slice(0, -1).join('.') || fileNameOnly;
 
-        let file = null;
-        let foundKey = null;
+        let file: File | null = null;
 
         // Try multiple path formats to find file
         const tryPaths = [
@@ -71,7 +87,6 @@ export async function loadMeshFile(meshPath, fileMap) {
         for (const tryPath of tryPaths) {
             if (fileMap.has(tryPath)) {
                 file = fileMap.get(tryPath);
-                foundKey = tryPath;
                 break;
             }
         }
@@ -92,7 +107,6 @@ export async function loadMeshFile(meshPath, fileMap) {
                     keyBaseName === baseNameLower ||
                     keyLower.endsWith('/' + searchNameLower)) {
                     file = value;
-                    foundKey = key;
                     break;
                 }
             }
@@ -105,7 +119,6 @@ export async function loadMeshFile(meshPath, fileMap) {
                 const pathWithExt = normalizedPath + ext;
                 if (fileMap.has(pathWithExt)) {
                     file = fileMap.get(pathWithExt);
-                    foundKey = pathWithExt;
                     break;
                 }
             }
@@ -122,7 +135,7 @@ export async function loadMeshFile(meshPath, fileMap) {
 
         try {
             const loaders = await getLoaders();
-            let geometry = null;
+            let geometry: THREE.BufferGeometry | THREE.Object3D | null = null;
 
             switch (fileExt) {
                 case 'stl':
@@ -134,14 +147,14 @@ export async function loadMeshFile(meshPath, fileMap) {
                 case 'obj':
                     // Try loading MTL file
                     const mtlFileName = file.name.replace(/\.obj$/i, '.mtl');
-                    const mtlFile = Array.from(fileMap.values()).find((f: any) =>
+                    const mtlFile = Array.from(fileMap.values()).find((f: File) =>
                         f.name && f.name.toLowerCase() === mtlFileName.toLowerCase()
                     );
 
                     if (mtlFile) {
                         try {
-                            const mtlUrl = URL.createObjectURL(mtlFile as any);
-                            const materials: any = await new Promise((resolve, reject) => {
+                            const mtlUrl = URL.createObjectURL(mtlFile);
+                            const materials = await new Promise<ObjLoaderMaterials>((resolve, reject) => {
                                 loaders.MTLLoader.load(mtlUrl, resolve, undefined, reject);
                             });
                             URL.revokeObjectURL(mtlUrl);
@@ -160,7 +173,7 @@ export async function loadMeshFile(meshPath, fileMap) {
                     break;
 
                 case 'dae':
-                    const daeResult: any = await new Promise((resolve, reject) => {
+                    const daeResult = await new Promise<Collada>((resolve, reject) => {
                         loaders.ColladaLoader.load(url, resolve, undefined, reject);
                     });
                     geometry = daeResult ? daeResult.scene : null;
@@ -168,7 +181,7 @@ export async function loadMeshFile(meshPath, fileMap) {
 
                 case 'gltf':
                 case 'glb':
-                    const gltfResult: any = await new Promise((resolve, reject) => {
+                    const gltfResult = await new Promise<GLTF>((resolve, reject) => {
                         loaders.GLTFLoader.load(url, resolve, undefined, reject);
                     });
                     geometry = gltfResult ? gltfResult.scene : null;
@@ -184,7 +197,7 @@ export async function loadMeshFile(meshPath, fileMap) {
 
             // Ensure all meshes in loaded geometry have Phong materials with proper lighting
             // This is critical for DAE/OBJ files which may have nested Groups
-            if (geometry && (geometry.isGroup || geometry.isObject3D || geometry.isScene)) {
+            if (geometry instanceof THREE.Object3D) {
                 ensureMeshHasPhongMaterial(geometry);
             }
 
@@ -204,7 +217,7 @@ export async function loadMeshFile(meshPath, fileMap) {
  * Ensure mesh uses lighting-compatible material
  * Enhanced for better lighting (MuJoCo style)
  */
-export function ensureMeshHasPhongMaterial(meshObject) {
+export function ensureMeshHasPhongMaterial(meshObject: THREE.Object3D): void {
     meshObject.traverse((child) => {
         if (child.isMesh && child.material) {
             // Handle material arrays (common in DAE files with multiple materials)
@@ -297,4 +310,3 @@ export function ensureMeshHasPhongMaterial(meshObject) {
 }
 
 export { getLoaders };
-

@@ -4,16 +4,22 @@
  */
 import * as THREE from 'three';
 
-export class EnvironmentManager {
-    scene: any;
-    lights: any;
-    groundPlane: any;
-    globalAxes: any;
-    referenceGrid: any;
-    envMap: any;
-    pmremGenerator: any;
+interface EnvironmentLights {
+    ambient?: THREE.HemisphereLight;
+    directional?: THREE.DirectionalLight;
+    fill?: THREE.DirectionalLight;
+}
 
-    constructor(scene: any) {
+export class EnvironmentManager {
+    scene: THREE.Scene;
+    lights: EnvironmentLights;
+    groundPlane: THREE.Mesh | null;
+    globalAxes: THREE.Object3D | null;
+    referenceGrid: THREE.GridHelper | null;
+    envMap: THREE.Texture | null;
+    pmremGenerator: THREE.PMREMGenerator | null;
+
+    constructor(scene: THREE.Scene) {
         this.scene = scene;
         this.lights = {};
         this.groundPlane = null;
@@ -26,7 +32,7 @@ export class EnvironmentManager {
     /**
      * Setup lighting system
      */
-    setupLights() {
+    setupLights(): void {
         // Hemisphere light
         this.lights.ambient = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
         this.lights.ambient.position.set(0, 1, 0);
@@ -66,7 +72,7 @@ export class EnvironmentManager {
     /**
      * Setup environment map for material reflections
      */
-    setupEnvironmentMap(renderer = null) {
+    setupEnvironmentMap(renderer: THREE.WebGLRenderer | null = null): void {
         // Create a simple environment map using PMREMGenerator
         // This will be used for material reflections
         if (renderer) {
@@ -124,7 +130,7 @@ export class EnvironmentManager {
     /**
      * Initialize environment map with renderer (called after renderer is created)
      */
-    initializeEnvironmentMap(renderer) {
+    initializeEnvironmentMap(renderer: THREE.WebGLRenderer | null): void {
         if (renderer && !this.envMap) {
             this.setupEnvironmentMap(renderer);
         }
@@ -133,14 +139,14 @@ export class EnvironmentManager {
     /**
      * Get environment map
      */
-    getEnvironmentMap() {
+    getEnvironmentMap(): THREE.Texture | null {
         return this.envMap;
     }
 
     /**
      * Setup ground plane
      */
-    setupGroundPlane() {
+    setupGroundPlane(): void {
         const planeGeometry = new THREE.PlaneGeometry(40, 40);
         const planeMaterial = new THREE.ShadowMaterial({
             side: THREE.DoubleSide,
@@ -165,7 +171,7 @@ export class EnvironmentManager {
     /**
      * Create reference grid
      */
-    createReferenceGrid() {
+    createReferenceGrid(): void {
         const gridSize = 10;  // 10m x 10m
         const divisions = 20; // 20 divisions (0.5m per cell)
 
@@ -191,7 +197,7 @@ export class EnvironmentManager {
      * Update grid color based on theme
      * @param {string} theme - 'light' or 'dark'
      */
-    updateGridColorForTheme(theme) {
+    updateGridColorForTheme(theme: string): void {
         if (!this.referenceGrid) return;
 
         if (theme === 'light') {
@@ -223,7 +229,7 @@ export class EnvironmentManager {
     /**
      * Update directional light shadow camera range
      */
-    updateShadowCamera(bbox) {
+    updateShadowCamera(bbox: THREE.Box3): void {
         const dirLight = this.lights.directional;
         if (!dirLight || !dirLight.castShadow) return;
 
@@ -246,7 +252,7 @@ export class EnvironmentManager {
     /**
      * Update ground position (move to model lowest point)
      */
-    updateGroundPosition(minY) {
+    updateGroundPosition(minY: number): void {
         if (this.groundPlane) {
             this.groundPlane.position.y = minY;
         }
@@ -259,7 +265,7 @@ export class EnvironmentManager {
     /**
      * Set ground visibility
      */
-    setGroundVisible(visible) {
+    setGroundVisible(visible: boolean): void {
         if (this.groundPlane) {
             this.groundPlane.visible = visible;
         }
@@ -268,7 +274,7 @@ export class EnvironmentManager {
     /**
      * Enable/disable shadows
      */
-    setShadowEnabled(enabled, renderer) {
+    setShadowEnabled(enabled: boolean, renderer: THREE.WebGLRenderer): void {
         renderer.shadowMap.enabled = enabled;
 
         if (this.lights.directional) {
@@ -284,8 +290,7 @@ export class EnvironmentManager {
     /**
      * Get directional light
      */
-    getDirectionalLight() {
+    getDirectionalLight(): THREE.DirectionalLight | undefined {
         return this.lights.directional;
     }
 }
-

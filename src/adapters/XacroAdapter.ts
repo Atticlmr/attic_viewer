@@ -20,8 +20,40 @@
  * - The adapter automatically resolves file inclusions from the uploaded file map
  * - Mesh files are resolved using package:// paths or relative paths
  */
+import * as THREE from 'three';
 import { XacroParser } from 'xacro-parser';
+import type { Collada } from 'three/examples/jsm/loaders/ColladaLoader.js';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { URDFAdapter } from './URDFAdapter.js';
+
+interface URDFLoaderLike {
+    parseCollision: boolean;
+    packages?: Record<string, string>;
+    manager: THREE.LoadingManager;
+    loadMeshCb?: (
+        path: string,
+        manager: THREE.LoadingManager,
+        onComplete: (result: THREE.Object3D | null, error?: Error | null) => void
+    ) => void;
+    defaultMeshLoader?: (
+        path: string,
+        manager: THREE.LoadingManager,
+        onComplete: (result: THREE.Object3D | null, error?: Error | null) => void
+    ) => void;
+    load: (
+        path: string,
+        onLoad: (robot: THREE.Group) => void,
+        onProgress?: unknown,
+        onError?: (error: Error) => void
+    ) => void;
+}
+
+type URDFLoaderConstructor = new () => URDFLoaderLike;
+type URDFLoaderModule = {
+    URDFLoader?: URDFLoaderConstructor;
+    default?: URDFLoaderConstructor;
+};
+type URDFMeshLoader = NonNullable<URDFLoaderLike['loadMeshCb']>;
 
 export class XacroAdapter {
     /**
@@ -115,8 +147,11 @@ export class XacroAdapter {
 
             // Now use existing URDF loading infrastructure
             // Import URDFLoader dynamically
-            const urdfModule = await import('urdf-loader') as any;
-            const URDFLoader: any = urdfModule.URDFLoader || urdfModule.default || urdfModule;
+            const urdfModule = await import('urdf-loader') as unknown as URDFLoaderModule;
+            const URDFLoader = urdfModule.URDFLoader || urdfModule.default;
+            if (!URDFLoader) {
+                throw new Error('URDFLoader constructor not found');
+            }
 
             return new Promise((resolve, reject) => {
                 const loader = new URDFLoader();
@@ -242,7 +277,9 @@ export class XacroAdapter {
                     loader.manager.setURLModifier(urlModifier);
 
                     // Custom loadMeshCb (same as URDF loading)
-                    const originalLoadMeshCb = loader.loadMeshCb || loader.defaultMeshLoader.bind(loader);
+                    const originalLoadMeshCb: URDFMeshLoader = loader.loadMeshCb
+                        || loader.defaultMeshLoader?.bind(loader)
+                        || ((path, _manager, done) => done(null, new Error(`No mesh loader available for ${path}`)));
                     loader.loadMeshCb = (path, manager, done) => {
                         this.findFileInMapByPath(path, fileMap, urdfDir).then(file => {
                             if (file) {
@@ -488,7 +525,7 @@ export class XacroAdapter {
                 case 'stl': {
                     const { STLLoader } = await import('three/examples/jsm/loaders/STLLoader.js');
                     const stlLoader = new STLLoader(manager);
-                    const stlGeometry: any = await new Promise((resolve, reject) => {
+                    const stlGeometry = await new Promise<THREE.BufferGeometry>((resolve, reject) => {
                         stlLoader.load(blobUrl, resolve, undefined, reject);
                     });
                     const stlMaterial = new THREE.MeshPhongMaterial();
@@ -499,7 +536,7 @@ export class XacroAdapter {
                 case 'dae': {
                     const { ColladaLoader } = await import('three/examples/jsm/loaders/ColladaLoader.js');
                     const colladaLoader = new ColladaLoader(manager);
-                    const colladaModel: any = await new Promise((resolve, reject) => {
+                    const colladaModel = await new Promise<Collada>((resolve, reject) => {
                         colladaLoader.load(blobUrl, resolve, undefined, reject);
                     });
                     meshObject = colladaModel.scene;
@@ -534,7 +571,7 @@ export class XacroAdapter {
                 case 'glb': {
                     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
                     const gltfLoader = new GLTFLoader(manager);
-                    const gltfModel: any = await new Promise((resolve, reject) => {
+                    const gltfModel = await new Promise<GLTF>((resolve, reject) => {
                         gltfLoader.load(blobUrl, resolve, undefined, reject);
                     });
                     meshObject = gltfModel.scene;
@@ -610,5 +647,3 @@ export class XacroAdapter {
         return args;
     }
 }
-
-

@@ -5,6 +5,26 @@
 import { UnifiedRobotModel, Link, Joint, JointLimits, VisualGeometry, CollisionGeometry, InertialProperties, GeometryType } from '../models/UnifiedRobotModel.js';
 import * as THREE from 'three';
 
+interface USDViewerManagerLike {
+    loadFromFilesMap(files: Record<string, File>, primaryPath: string): Promise<void>;
+    loadFromFile(file: File): Promise<void>;
+}
+
+interface USDParseOptions {
+    usdViewerManager?: USDViewerManagerLike;
+}
+
+type GeometryWithParameters = THREE.BufferGeometry & {
+    type?: string;
+    parameters?: {
+        width?: number;
+        height?: number;
+        depth?: number;
+        radius?: number;
+        radiusTop?: number;
+    };
+};
+
 export class USDAdapter {
     /**
      * Parse USD content and convert to unified model
@@ -15,7 +35,12 @@ export class USDAdapter {
      * @param {Object} options.usdViewerManager - USD viewer manager
      * @returns {Promise<UnifiedRobotModel>}
      */
-    static async parse(content, fileMap = null, file = null, options: any = {}) {
+    static async parse(
+        _content: string | ArrayBuffer,
+        fileMap: Map<string, File> | null = null,
+        file: File | null = null,
+        options: USDParseOptions = {}
+    ): Promise<UnifiedRobotModel> {
         if (!options.usdViewerManager) {
             throw new Error('USD viewer not initialized');
         }
@@ -30,16 +55,20 @@ export class USDAdapter {
      * @param {Object} usdViewerManager - USD viewer manager
      * @returns {Promise<UnifiedRobotModel>}
      */
-    static async parseWithWASM(file, fileMap = null, usdViewerManager) {
+    static async parseWithWASM(
+        file: File,
+        fileMap: Map<string, File> | null = null,
+        usdViewerManager: USDViewerManagerLike
+    ): Promise<UnifiedRobotModel> {
         try {
             if (fileMap && fileMap.size > 1) {
-                const filesMapObj = {};
+                const filesMapObj: Record<string, File> = {};
                 for (const [path, f] of fileMap.entries()) {
                     filesMapObj[path] = f;
                 }
                 // Find primary USD file (exclude files in .thumbs directory and Props directory)
                 let primaryPath = file.name;
-                for (const [path, f] of fileMap.entries()) {
+                for (const [path] of fileMap.entries()) {
                     if (path.endsWith(file.name) &&
                         !path.includes('/.thumbs/') &&
                         !path.includes('/Props/')) {
@@ -69,7 +98,7 @@ export class USDAdapter {
     /**
      * [Deprecated] Use Three.js USDZLoader
      */
-    static async parseUSDZ_OLD(file, fileMap = null) {
+    static async parseUSDZ_OLD(file: File, _fileMap: Map<string, File> | null = null): Promise<UnifiedRobotModel> {
         // Dynamically import USDZLoader
         const { USDZLoader } = await import('three/examples/jsm/loaders/USDZLoader.js');
         const loader = new USDZLoader();
@@ -79,12 +108,10 @@ export class USDAdapter {
 
         try {
             // Load USDZ file
-            const group = await new Promise((resolve, reject) => {
+            const group = await new Promise<THREE.Group>((resolve, reject) => {
                 loader.load(
                     blobUrl,
-                    (result) => {
-                        resolve(result);
-                    },
+                    resolve,
                     undefined,
                     (error) => {
                         console.error('USDZ loading failed:', error);
@@ -107,7 +134,7 @@ export class USDAdapter {
     /**
      * Convert Three.js Group to UnifiedRobotModel
      */
-    static convertThreeGroupToModel(group, fileName) {
+    static convertThreeGroupToModel(group: THREE.Group, fileName: string): UnifiedRobotModel {
         const model = new UnifiedRobotModel();
         model.name = fileName.replace(/\.(usdz|usdc|usd|usda)$/i, '');
         model.threeObject = group;
@@ -115,13 +142,13 @@ export class USDAdapter {
         // Extract all meshes as links
         let linkIndex = 0;
         group.traverse((child) => {
-            if (child.isMesh || child.isGroup) {
+            if (child instanceof THREE.Mesh || child instanceof THREE.Group) {
                 const linkName = child.name || `link_${linkIndex++}`;
                 const link = new Link(linkName);
                 link.threeObject = child;
 
                 // If mesh, create visual geometry
-                if (child.isMesh) {
+                if (child instanceof THREE.Mesh) {
                     const visual = new VisualGeometry();
                     visual.name = child.name || linkName;
                     visual.threeObject = child;
@@ -144,7 +171,7 @@ export class USDAdapter {
     /**
      * Extract geometry information
      */
-    static extractGeometryInfo(geometry) {
+    static extractGeometryInfo(geometry: GeometryWithParameters): GeometryType {
         const geometryType = new GeometryType('mesh');
 
         // Try to identify geometry type
@@ -174,7 +201,7 @@ export class USDAdapter {
     /**
      * [Removed] Old parsing method
      */
-    static parseASCIIUSD_DEPRECATED(content, fileMap = null) {
+    static parseASCIIUSD_DEPRECATED(content: string, _fileMap: Map<string, File> | null = null): UnifiedRobotModel {
         const model = new UnifiedRobotModel();
         model.name = 'usd_model';
 
@@ -195,9 +222,9 @@ export class USDAdapter {
 
         const lines = content.split('\n');
 
-        let currentPrim = null;
-        let currentLink = null;
-        let stack = [];
+        let currentPrim: string | null = null;
+        let currentLink: Link | null = null;
+        const stack: Array<{ type: string; obj: Link | VisualGeometry }> = [];
         let defMatchCount = 0;
 
         for (let i = 0; i < lines.length; i++) {
@@ -403,4 +430,3 @@ export class USDAdapter {
         }
     }
 }
-

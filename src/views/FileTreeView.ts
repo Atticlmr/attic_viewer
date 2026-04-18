@@ -2,11 +2,19 @@
  * FileTreeView - File tree view
  * Responsible for displaying and managing file tree structure
  */
+import type { AppFileType, LoadableFileInfo } from '../types/app.js';
+
+interface FileTreeFileEntry extends LoadableFileInfo {}
+
+interface FileTreeNode {
+    __files?: FileTreeFileEntry[];
+    [key: string]: FileTreeNode | FileTreeFileEntry[] | undefined;
+}
 
 export class FileTreeView {
-    availableModels: any[];
-    onFileClick: any;
-    onFilesSelected: any;
+    availableModels: LoadableFileInfo[];
+    onFileClick: ((fileInfo: LoadableFileInfo) => void) | null;
+    onFilesSelected: ((files: File[]) => void | Promise<void>) | null;
     private eventListeners: Array<{ element: Element; type: string; handler: EventListener }> = [];
 
     constructor() {
@@ -18,7 +26,7 @@ export class FileTreeView {
     /**
      * Track event listener for cleanup
      */
-    private addTrackedEventListener(element: Element, type: string, handler: EventListener) {
+    private addTrackedEventListener(element: Element, type: string, handler: EventListener): void {
         element.addEventListener(type, handler);
         this.eventListeners.push({ element, type, handler });
     }
@@ -26,7 +34,7 @@ export class FileTreeView {
     /**
      * Clear all tracked event listeners
      */
-    private clearEventListeners() {
+    private clearEventListeners(): void {
         this.eventListeners.forEach(({ element, type, handler }) => {
             element.removeEventListener(type, handler);
         });
@@ -36,7 +44,7 @@ export class FileTreeView {
     /**
      * Update file tree
      */
-    updateFileTree(files, fileMap, preserveState = false) {
+    updateFileTree(files: LoadableFileInfo[], fileMap: Map<string, File>, preserveState = false): void {
         this.clearEventListeners();
         
         this.availableModels = files;
@@ -64,7 +72,7 @@ export class FileTreeView {
     /**
      * Show load file/folder button when no files are loaded
      */
-    showLoadButton(container) {
+    showLoadButton(container: HTMLElement): void {
         const emptyContainer = document.createElement('div');
         emptyContainer.className = 'file-tree-empty-container';
         emptyContainer.style.cssText = `
@@ -153,7 +161,7 @@ export class FileTreeView {
     /**
      * Trigger file/folder loading dialog
      */
-    triggerFileLoad(isFolder = false) {
+    triggerFileLoad(isFolder = false): void {
         // Create a temporary file input to allow file selection
         const input = document.createElement('input');
         input.type = 'file';
@@ -185,8 +193,8 @@ export class FileTreeView {
     /**
      * Save file tree state
      */
-    saveTreeState() {
-        const expandedPaths = [];
+    saveTreeState(): string[] {
+        const expandedPaths: string[] = [];
         document.querySelectorAll('.tree-item.folder:not(.collapsed)').forEach(folder => {
             const nameSpan = folder.querySelector('.name');
             if (nameSpan) {
@@ -199,7 +207,7 @@ export class FileTreeView {
     /**
      * Restore file tree state
      */
-    restoreTreeState(expandedPaths) {
+    restoreTreeState(expandedPaths: string[]): void {
         if (!expandedPaths || expandedPaths.length === 0) return;
 
         document.querySelectorAll('.tree-item.folder').forEach(folder => {
@@ -213,7 +221,7 @@ export class FileTreeView {
     /**
      * Mark current active file
      */
-    markActiveFile(file) {
+    markActiveFile(file: File): void {
         document.querySelectorAll('.tree-item.selected').forEach(item => {
             item.classList.remove('selected');
         });
@@ -231,11 +239,11 @@ export class FileTreeView {
     /**
      * Expand folder containing file and scroll to file position
      */
-    expandAndScrollToFile(file, fileMap) {
+    expandAndScrollToFile(file: File | null, fileMap: Map<string, File>): void {
         if (!file) return;
 
         // Find file's full path in fileMap
-        let filePath = null;
+        let filePath: string | null = null;
         fileMap.forEach((f, path) => {
             if (f === file) {
                 filePath = path;
@@ -248,7 +256,7 @@ export class FileTreeView {
 
         // Get all folders in path
         const pathParts = filePath.split('/').filter(p => p);
-        const folderPaths = [];
+        const folderPaths: string[] = [];
 
         // Build folder paths for each level
         for (let i = 0; i < pathParts.length - 1; i++) {
@@ -268,7 +276,7 @@ export class FileTreeView {
         // Delay scrolling to ensure DOM is updated
         setTimeout(() => {
             const allTreeItems = document.querySelectorAll('#model-list .tree-item');
-            let targetItem = null;
+            let targetItem: Element | null = null;
 
             allTreeItems.forEach(item => {
                 const nameSpan = item.querySelector('.name');
@@ -290,7 +298,7 @@ export class FileTreeView {
     /**
      * Check if XML file is a model file (URDF/MJCF)
      */
-    isModelXML(fileName) {
+    isModelXML(fileName: string): boolean {
         const lowerName = fileName.toLowerCase();
         // Exclude common non-model XML files
         const excludePatterns = ['package', 'launch', 'config', 'scene', 'ros'];
@@ -300,13 +308,14 @@ export class FileTreeView {
     /**
      * Build file tree
      */
-    buildFileTree(container, files, fileMap) {
-        const fileStructure = {};
+    buildFileTree(container: HTMLElement, _files: LoadableFileInfo[], fileMap: Map<string, File>): void {
+        const fileStructure: FileTreeNode = {};
 
         fileMap.forEach((file, path) => {
-            const ext = file.name.split('.').pop().toLowerCase();
+            const ext = file.name.split('.').pop()?.toLowerCase();
             const supportedExtensions = ['urdf', 'xacro', 'xml', 'dae', 'stl', 'obj', 'collada', 'usd', 'usda', 'usdc'];
 
+            if (!ext) return;
             if (!supportedExtensions.includes(ext)) return;
 
             // If XML file, check if it's a model file
@@ -315,21 +324,24 @@ export class FileTreeView {
             }
 
             const parts = path.split('/').filter(p => p);
-            let current = fileStructure;
+            let current: FileTreeNode = fileStructure;
 
             parts.forEach((part, index) => {
                 if (index === parts.length - 1) {
-                    const currentAny = current as any;
-                    if (!currentAny.__files) currentAny.__files = [];
-                    currentAny.__files.push({
+                    if (!current.__files) current.__files = [];
+                    current.__files.push({
                         name: part,
-                        file: file,
-                        path: path,
-                        ext: ext
+                        file,
+                        path,
+                        ext,
+                        type: mapExtensionToFileType(ext),
+                        category: isModelExtension(ext) ? 'model' : 'mesh'
                     });
                 } else {
-                    if (!current[part]) current[part] = {};
-                    current = current[part];
+                    if (!current[part] || Array.isArray(current[part])) {
+                        current[part] = {};
+                    }
+                    current = current[part] as FileTreeNode;
                 }
             });
         });
@@ -340,13 +352,16 @@ export class FileTreeView {
     /**
      * Render file tree structure
      */
-    renderFileTreeStructure(structure, container) {
-        const folders = [];
-        const files = [];
+    renderFileTreeStructure(structure: FileTreeNode, container: HTMLElement): void {
+        const folders: string[] = [];
+        const files: FileTreeFileEntry[] = [];
 
         Object.keys(structure).forEach(key => {
             if (key === '__files') {
-                files.push(...structure[key]);
+                const fileEntries = structure[key];
+                if (Array.isArray(fileEntries)) {
+                    files.push(...fileEntries);
+                }
             } else {
                 folders.push(key);
             }
@@ -355,7 +370,9 @@ export class FileTreeView {
         folders.sort().forEach(folderName => {
             const folder = this.createTreeFolder(folderName);
             const folderChildren = folder.querySelector('.tree-children');
-            this.renderFileTreeStructure(structure[folderName], folderChildren);
+            if (folderChildren && !Array.isArray(structure[folderName])) {
+                this.renderFileTreeStructure((structure[folderName] as FileTreeNode) || {}, folderChildren as HTMLElement);
+            }
             container.appendChild(folder);
         });
 
@@ -367,7 +384,7 @@ export class FileTreeView {
     /**
      * Create folder node
      */
-    createTreeFolder(name) {
+    createTreeFolder(name: string): HTMLDivElement {
         const folder = document.createElement('div');
         folder.className = 'tree-item folder collapsed';
 
@@ -409,7 +426,7 @@ export class FileTreeView {
     /**
      * Render file list
      */
-    renderFiles(files, container) {
+    renderFiles(files: FileTreeFileEntry[], container: HTMLElement): void {
         files.sort((a, b) => {
             const modelExts = ['urdf', 'xacro', 'xml', 'usd', 'usda', 'usdc'];
             const aIsModel = modelExts.includes(a.ext);
@@ -422,7 +439,7 @@ export class FileTreeView {
 
         files.forEach(fileInfo => {
             const item = this.createTreeItem(fileInfo.name, fileInfo.ext);
-            const clickHandler = (e) => {
+            const clickHandler: EventListener = (e) => {
                 e.stopPropagation();
                 document.querySelectorAll('.tree-item.selected').forEach(elem => {
                     elem.classList.remove('selected');
@@ -438,7 +455,7 @@ export class FileTreeView {
     /**
      * Create file node
      */
-    createTreeItem(name, ext) {
+    createTreeItem(name: string, _ext: string): HTMLDivElement {
         const item = document.createElement('div');
         item.className = 'tree-item';
 
@@ -477,3 +494,14 @@ export class FileTreeView {
     }
 }
 
+function isModelExtension(ext: string): boolean {
+    return ['urdf', 'xacro', 'xml', 'usd', 'usda', 'usdc', 'usdz'].includes(ext);
+}
+
+function mapExtensionToFileType(ext: string): AppFileType {
+    if (['urdf', 'xacro'].includes(ext)) return ext as AppFileType;
+    if (['xml'].includes(ext)) return 'mjcf';
+    if (['usd', 'usda', 'usdc', 'usdz'].includes(ext)) return 'usd';
+    if (['dae', 'stl', 'obj', 'collada'].includes(ext)) return 'mesh';
+    return 'unknown';
+}

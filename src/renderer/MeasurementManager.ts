@@ -1,13 +1,20 @@
 import * as THREE from 'three';
+import type { SceneManager } from './SceneManager.js';
+
+interface MeasurementDelta {
+    x: number;
+    y: number;
+    z: number;
+}
 
 /**
  * MeasurementManager - Handles distance measurement visualization
  */
 export class MeasurementManager {
-    sceneManager: any;
-    measurementHelper: any;
+    sceneManager: SceneManager;
+    measurementHelper: THREE.Group | null;
 
-    constructor(sceneManager: any) {
+    constructor(sceneManager: SceneManager) {
         this.sceneManager = sceneManager;
         this.measurementHelper = null;
     }
@@ -22,7 +29,7 @@ export class MeasurementManager {
      * @param {string} name2 - Second object name
      * @param {boolean} hasGround - Whether includes ground (if yes, only show vertical height)
      */
-    showMeasurement(pos1, pos2, delta, totalDistance, name1, name2, hasGround = false) {
+    showMeasurement(pos1: THREE.Vector3, pos2: THREE.Vector3, delta: MeasurementDelta, totalDistance: number, name1: string, name2: string, hasGround = false): void {
         // Clear previous measurement
         this.clearMeasurement();
 
@@ -187,11 +194,16 @@ export class MeasurementManager {
     /**
      * Helper function: create text label (no background)
      */
-    createLabel(text, position, color) {
+    createLabel(text: string, position: THREE.Vector3, color: string): THREE.Sprite {
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         canvas.width = 256;
         canvas.height = 64;
+        if (!context) {
+            const fallback = new THREE.Sprite(new THREE.SpriteMaterial());
+            fallback.position.copy(position);
+            return fallback;
+        }
 
         // Fully transparent background
         context.clearRect(0, 0, canvas.width, canvas.height);
@@ -227,7 +239,7 @@ export class MeasurementManager {
     /**
      * Clear measurement display
      */
-    clearMeasurement() {
+    clearMeasurement(): void {
         if (this.measurementHelper) {
             this.sceneManager.scene.remove(this.measurementHelper);
             this.measurementHelper = null;
@@ -238,8 +250,7 @@ export class MeasurementManager {
     /**
      * Clear all measurements
      */
-    clear() {
+    clear(): void {
         this.clearMeasurement();
     }
 }
-

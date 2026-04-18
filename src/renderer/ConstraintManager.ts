@@ -1,15 +1,17 @@
 import * as THREE from 'three';
 import { ModelLoaderFactory } from '../loaders/ModelLoaderFactory.js';
+import type { SceneManager } from './SceneManager.js';
+import type { Constraint, Joint, UnifiedRobotModel } from '../models/UnifiedRobotModel.js';
 
 /**
  * ConstraintManager - Handles parallel mechanism constraint visualization and solving
  */
 export class ConstraintManager {
-    sceneManager: any;
-    constraintVisuals: any[];
+    sceneManager: SceneManager;
+    constraintVisuals: THREE.Object3D[];
     showConstraints: boolean;
 
-    constructor(sceneManager: any) {
+    constructor(sceneManager: SceneManager) {
         this.sceneManager = sceneManager;
         this.constraintVisuals = [];
         this.showConstraints = true;
@@ -18,7 +20,7 @@ export class ConstraintManager {
     /**
      * Visualize parallel mechanism constraints
      */
-    visualizeConstraints(model, world) {
+    visualizeConstraints(model: UnifiedRobotModel, world: THREE.Object3D | null): void {
         // Clean up previous constraint visualizations
         this.constraintVisuals.forEach(visual => {
             if (visual.parent) {
@@ -50,7 +52,7 @@ export class ConstraintManager {
     /**
      * Visualize body constraint (connect/weld)
      */
-    visualizeBodyConstraint(model, constraint, world) {
+    visualizeBodyConstraint(model: UnifiedRobotModel, constraint: Constraint, world: THREE.Object3D | null): void {
         const body1 = this.findLinkObject(model.threeObject, constraint.body1);
         const body2 = this.findLinkObject(model.threeObject, constraint.body2);
 
@@ -129,7 +131,7 @@ export class ConstraintManager {
     /**
      * Visualize joint constraint (joint coupling)
      */
-    visualizeJointConstraint(model, constraint, world) {
+    visualizeJointConstraint(model: UnifiedRobotModel, constraint: Constraint, world: THREE.Object3D | null): void {
         const joint1 = model.getJoint(constraint.joint1);
         const joint2 = model.getJoint(constraint.joint2);
 
@@ -204,7 +206,7 @@ export class ConstraintManager {
     /**
      * Visualize distance constraint
      */
-    visualizeDistanceConstraint(model, constraint, world) {
+    visualizeDistanceConstraint(model: UnifiedRobotModel, constraint: Constraint, world: THREE.Object3D | null): void {
         // Similar to body constraint, but use different color
         const body1 = this.findLinkObject(model.threeObject, constraint.body1);
         const body2 = this.findLinkObject(model.threeObject, constraint.body2);
@@ -270,7 +272,7 @@ export class ConstraintManager {
      * Apply parallel mechanism constraints (closed-chain kinematics solving)
      * Uses iterative method to solve constraints
      */
-    applyConstraints(model, changedJoint) {
+    applyConstraints(model: UnifiedRobotModel, changedJoint: Joint | null): void {
         if (!model.constraints || model.constraints.size === 0) {
             return; // No constraints, skip
         }
@@ -287,7 +289,7 @@ export class ConstraintManager {
     /**
      * Solve connect constraint (using numerical iteration method)
      */
-    solveConnectConstraint(model, constraint) {
+    solveConnectConstraint(model: UnifiedRobotModel, constraint: Constraint): void {
         const body1 = this.findLinkObject(model.threeObject, constraint.body1);
         const body2 = this.findLinkObject(model.threeObject, constraint.body2);
 
@@ -393,7 +395,7 @@ export class ConstraintManager {
         body1.localToWorld(pos1);
         pos2.set(anchor[0], anchor[1], anchor[2]);
         body2.localToWorld(pos2);
-        const finalError = pos1.distanceTo(pos2);
+        pos1.distanceTo(pos2);
     }
 
     /**
@@ -401,7 +403,7 @@ export class ConstraintManager {
      * Synchronizes two joints based on polycoef coefficients
      * Default polycoef [0, 1] means: joint1 = joint2
      */
-    solveJointConstraint(model, constraint, changedJoint) {
+    solveJointConstraint(model: UnifiedRobotModel, constraint: Constraint, changedJoint: Joint | null): void {
         const joint1 = model.getJoint(constraint.joint1);
         const joint2 = model.getJoint(constraint.joint2);
 
@@ -427,8 +429,8 @@ export class ConstraintManager {
         const c5 = polycoef[5] !== undefined ? polycoef[5] : 1;
 
         // Determine which joint was changed
-        let sourceJoint: any;
-        let targetJoint: any;
+        let sourceJoint: Joint | null = null;
+        let targetJoint: Joint | null = null;
         let coefficient: number;
 
         if (changedJoint && changedJoint.name === constraint.joint1) {
@@ -443,6 +445,10 @@ export class ConstraintManager {
             coefficient = c5 / c1;
         } else {
             // No changed joint specified, skip
+            return;
+        }
+
+        if (!sourceJoint || !targetJoint) {
             return;
         }
 
@@ -486,7 +492,7 @@ export class ConstraintManager {
      * Determine if two joints should have inverted relationship (opposite directions)
      * Based on MJCF equality constraint: default polycoef=[0,1] means joint1 = joint2 (same direction)
      */
-    shouldInvertJointRelation(joint1: any, joint2: any, model: any): boolean {
+    shouldInvertJointRelation(_joint1: Joint, _joint2: Joint, _model: UnifiedRobotModel): boolean {
         // Default behavior: don't invert (joint1 = joint2 per MJCF spec)
         return false;
     }
@@ -494,9 +500,9 @@ export class ConstraintManager {
     /**
      * Find all joints affecting specified body
      */
-    findJointsAffecting(model, bodyName) {
-        const joints = [];
-        const visited = new Set();
+    findJointsAffecting(model: UnifiedRobotModel, bodyName: string | null): Joint[] {
+        const joints: Joint[] = [];
+        const visited = new Set<string>();
 
         // Traverse upward from specified body to root
         let currentBody = bodyName;
@@ -506,8 +512,8 @@ export class ConstraintManager {
             visited.add(currentBody);
 
             // Find joint connected to this body
-            let parentJoint = null;
-            model.joints.forEach((joint) => {
+            let parentJoint: Joint | null = null;
+            model.joints.forEach((joint: Joint) => {
                 if (joint.child === currentBody) {
                     parentJoint = joint;
                     joints.push(joint);
@@ -527,8 +533,12 @@ export class ConstraintManager {
     /**
      * Find link object in scene graph
      */
-    findLinkObject(root, linkName) {
-        let found = null;
+    findLinkObject(root: THREE.Object3D | null, linkName: string | null): THREE.Object3D | null {
+        if (!root || !linkName) {
+            return null;
+        }
+
+        let found: THREE.Object3D | null = null;
         root.traverse((child) => {
             if (child.name === linkName || child.name === `link_${linkName}` || child.name === `body_${linkName}`) {
                 found = child;
@@ -540,11 +550,10 @@ export class ConstraintManager {
     /**
      * Clear all constraint visualizations
      */
-    clear() {
+    clear(): void {
         this.constraintVisuals.forEach(visual => {
             if (visual.parent) visual.parent.remove(visual);
         });
         this.constraintVisuals = [];
     }
 }
-

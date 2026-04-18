@@ -1,17 +1,19 @@
 /**
  * Theme Handler - Handles theme change events
  */
-export class ThemeHandler {
-    app: any;
+import type { App } from '../App.js';
 
-    constructor(app: any) {
+export class ThemeHandler {
+    app: App;
+
+    constructor(app: App) {
         this.app = app;
     }
 
     /**
      * Handle theme change
      */
-    handleThemeChanged(theme) {
+    handleThemeChanged(theme: string): void {
         if (this.app.codeEditorManager) {
             this.app.codeEditorManager.updateTheme(theme);
         }

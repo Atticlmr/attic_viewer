@@ -1,5 +1,52 @@
 import * as THREE from 'three';
 import { MathUtils } from './MathUtils.js';
+import type { Joint, Link, UnifiedRobotModel } from '../models/UnifiedRobotModel.js';
+
+interface InteractiveObject extends THREE.Object3D {
+    isURDFJoint?: boolean;
+    isURDFLink?: boolean;
+    isURDFCollider?: boolean;
+    jointType?: string;
+    axis?: THREE.Vector3;
+    angle?: number;
+    jointValue?: number[];
+}
+
+interface HoveredLinkRef {
+    linkData: Link;
+    threeObject: InteractiveObject;
+    name: string;
+}
+
+type JointUpdateHandler = (joint: Joint, angle: number) => void;
+
+function isURDFJointObject(obj: InteractiveObject | null | undefined): obj is InteractiveObject {
+    return Boolean(obj && obj.isURDFJoint && obj.jointType !== 'fixed');
+}
+
+function isColliderObject(obj: InteractiveObject | null | undefined): boolean {
+    let current = obj;
+    while (current) {
+        if (current.isURDFCollider) {
+            return true;
+        }
+        current = current.parent as InteractiveObject | null;
+    }
+    return false;
+}
+
+function temporarilyRevealVisualMeshes(model: UnifiedRobotModel): THREE.Mesh[] {
+    const hiddenMeshes: THREE.Mesh[] = [];
+
+    model.threeObject?.traverse((child) => {
+        if (child instanceof THREE.Mesh && !child.visible && !isColliderObject(child as InteractiveObject)) {
+            child.visible = true;
+            hiddenMeshes.push(child);
+        }
+    });
+
+    return hiddenMeshes;
+}
 
 /**
  * Universal joint drag control system
@@ -7,23 +54,16 @@ import { MathUtils } from './MathUtils.js';
  */
 
 /**
- * Check if object is a joint (for URDF special cases)
- */
-function isURDFJoint(obj) {
-    return obj && obj.isURDFJoint && obj.jointType !== 'fixed';
-}
-
-/**
  * Find the Link that the clicked object belongs to
  * Traverse upward from clicked mesh to find first URDFLink object
  * Simple and direct, no merge logic
  */
-function findParentLink(hitObject, model) {
+function findParentLink(hitObject: THREE.Object3D, model: UnifiedRobotModel | null): HoveredLinkRef | null {
     if (!model || !model.threeObject) {
         return null;
     }
 
-    let current = hitObject;
+    let current: InteractiveObject | null = hitObject as InteractiveObject;
     const modelRoot = model.threeObject;
 
     // Traverse upward to find first URDFLink object
@@ -33,6 +73,9 @@ function findParentLink(hitObject, model) {
             const linkName = current.name;
             if (linkName && model.links && model.links.has(linkName)) {
                 const linkData = model.links.get(linkName);
+                if (!linkData) {
+                    break;
+                }
                 // Return information including link data and Three.js object
                 return {
                     linkData: linkData,
@@ -57,22 +100,25 @@ function findParentLink(hitObject, model) {
  * Find parent joint of Link (for drag rotation)
  * Skip fixed joints, find first movable joint
  */
-function findParentJoint(link, model) {
+function findParentJoint(link: HoveredLinkRef | null, model: UnifiedRobotModel | null): Joint | null {
     if (!link || !link.threeObject || !model.joints) {
         return null;
     }
 
-    let currentLink = link.threeObject;
+    let currentLink: InteractiveObject | null = link.threeObject;
 
     // Search upward, skip fixed joints
     while (currentLink) {
-        const parentObject = currentLink.parent;
+        const parentObject = currentLink.parent as InteractiveObject | null;
 
         // If parent object is joint
-        if (parentObject && (parentObject.type === 'URDFJoint' || parentObject.isURDFJoint)) {
+        if (parentObject && (parentObject.type === 'URDFJoint' || isURDFJointObject(parentObject))) {
             const jointName = parentObject.name;
             if (jointName && model.joints.has(jointName)) {
                 const joint = model.joints.get(jointName);
+                if (!joint) {
+                    break;
+                }
 
                 // If movable joint, return it
                 if (joint.type !== 'fixed') {
@@ -81,7 +127,7 @@ function findParentJoint(link, model) {
 
                 // If fixed joint, continue searching upward
                 // Find this joint's parent link
-                const parentLink = parentObject.parent;
+                const parentLink = parentObject.parent as InteractiveObject | null;
                 if (parentLink && (parentLink.type === 'URDFLink' || parentLink.isURDFLink)) {
                     currentLink = parentLink;
                     continue;
@@ -110,20 +156,20 @@ const plane = new THREE.Plane();
  */
 export class JointDragControls {
     enabled: boolean;
-    scene: any;
-    camera: any;
-    domElement: any;
-    model: any;
-    raycaster: any;
-    initialGrabPoint: any;
+    scene: THREE.Scene;
+    camera: THREE.Camera;
+    domElement: HTMLElement;
+    model: UnifiedRobotModel | null;
+    raycaster: THREE.Raycaster;
+    initialGrabPoint: THREE.Vector3;
     hitDistance: number;
-    hovered: any;
-    manipulating: any;
-    renderer: any;
-    onUpdateJoint: any;
-    manipulatingLink: any;
+    hovered: HoveredLinkRef | null;
+    manipulating: Joint | null;
+    renderer: THREE.WebGLRenderer | null;
+    onUpdateJoint: JointUpdateHandler | null;
+    manipulatingLink: HoveredLinkRef | null;
 
-    constructor(scene: any, camera: any, domElement: any, model: any) {
+    constructor(scene: THREE.Scene, camera: THREE.Camera, domElement: HTMLElement, model: UnifiedRobotModel | null) {
         this.enabled = true;
         this.scene = scene;
         this.camera = camera;
@@ -137,9 +183,11 @@ export class JointDragControls {
         this.hovered = null;
         this.manipulating = null;
         this.renderer = null;
+        this.onUpdateJoint = null;
+        this.manipulatingLink = null;
     }
 
-    update() {
+    update(): void {
         const { raycaster, hovered, manipulating } = this;
         const model = this.model;
 
@@ -147,28 +195,10 @@ export class JointDragControls {
             return;
         }
 
-        let hoveredLink = null;
+        let hoveredLink: HoveredLinkRef | null = null;
 
         // Temporarily store and enable visibility for visual meshes to allow raycasting
-        const hiddenMeshes = [];
-        model.threeObject.traverse((child) => {
-            if (child.isMesh && !child.visible) {
-                // Check if it's a visual mesh (not collision)
-                let isInCollider = false;
-                let checkNode = child;
-                while (checkNode) {
-                    if (checkNode.isURDFCollider) {
-                        isInCollider = true;
-                        break;
-                    }
-                    checkNode = checkNode.parent;
-                }
-                if (!isInCollider) {
-                    child.visible = true;
-                    hiddenMeshes.push(child);
-                }
-            }
-        });
+        const hiddenMeshes = temporarilyRevealVisualMeshes(model);
 
         // Only detect robot model, not entire scene
         const intersections = raycaster.intersectObject(model.threeObject, true);
@@ -180,26 +210,15 @@ export class JointDragControls {
 
         // Filter out collision meshes (but allow invisible visual meshes for interaction)
         const validIntersections = intersections.filter(intersect => {
-            const obj = intersect.object;
+            const obj = intersect.object as InteractiveObject;
             // Skip collision meshes
-            if (obj.isURDFCollider || obj.userData?.isCollision || obj.userData?.isCollisionGeom) {
+            if (!(obj instanceof THREE.Mesh) || obj.isURDFCollider || obj.userData?.isCollision || obj.userData?.isCollisionGeom) {
                 return false;
             }
-            // Check if object is in collision hierarchy
-            let isInCollider = false;
-            let checkNode = obj;
-            while (checkNode) {
-                if (checkNode.isURDFCollider) {
-                    isInCollider = true;
-                    break;
-                }
-                checkNode = checkNode.parent;
-            }
-            if (isInCollider) {
+            if (isColliderObject(obj)) {
                 return false;
             }
-            // Allow all visual meshes
-            return obj.isMesh;
+            return true;
         });
 
         // Like urdf-loaders, only detect first intersecting object (closest)
@@ -232,38 +251,39 @@ export class JointDragControls {
         }
     }
 
-    updateJoint(joint, angle) {
+    updateJoint(joint: Joint, angle: number): void {
         // joint is unified model Joint object, need to update via onUpdateJoint callback
         if (this.onUpdateJoint) {
             this.onUpdateJoint(joint, angle);
         }
     }
 
-    onDragStart(link) {
+    onDragStart(_link: HoveredLinkRef): void {
         // Subclasses can override, parameter is dragged link
     }
 
-    onDragEnd(link) {
+    onDragEnd(_link: HoveredLinkRef): void {
         // Subclasses can override, parameter is dragged link
     }
 
-    onHover(link) {
+    onHover(_link: HoveredLinkRef): void {
         // Subclasses can override, parameter is hovered link
     }
 
-    onUnhover(link) {
+    onUnhover(_link: HoveredLinkRef): void {
         // Subclasses can override, parameter is link leaving hover
     }
 
     /**
      * Get joint axis vector (universal method)
      */
-    getJointAxis(joint) {
+    getJointAxis(joint: Joint): THREE.Vector3 {
         // Prefer getting axis from threeObject
-        if (joint.threeObject) {
+        const jointObject = joint.threeObject as InteractiveObject | null;
+        if (jointObject) {
             // URDF: joint.threeObject.axis (Vector3)
-            if (joint.threeObject.axis instanceof THREE.Vector3) {
-                return joint.threeObject.axis.clone();
+            if (jointObject.axis instanceof THREE.Vector3) {
+                return jointObject.axis.clone();
             }
             // Other formats may have different structures
         }
@@ -280,23 +300,24 @@ export class JointDragControls {
     /**
      * Get joint's Three.js object (for matrix transformations)
      */
-    getJointThreeObject(joint) {
+    getJointThreeObject(joint: Joint): THREE.Object3D | null {
         return joint.threeObject;
     }
 
     /**
      * Get joint current value (universal method)
      */
-    getJointCurrentValue(joint) {
+    getJointCurrentValue(joint: Joint): number {
         // Prefer getting from threeObject
-        if (joint.threeObject) {
+        const jointObject = joint.threeObject as InteractiveObject | null;
+        if (jointObject) {
             // URDF: joint.threeObject.angle
-            if (joint.threeObject.angle !== undefined) {
-                return joint.threeObject.angle;
+            if (jointObject.angle !== undefined) {
+                return jointObject.angle;
             }
             // URDF: joint.threeObject.jointValue[0]
-            if (joint.threeObject.jointValue && joint.threeObject.jointValue.length > 0) {
-                return joint.threeObject.jointValue[0];
+            if (jointObject.jointValue && jointObject.jointValue.length > 0) {
+                return jointObject.jointValue[0];
             }
         }
 
@@ -304,7 +325,7 @@ export class JointDragControls {
         return joint.currentValue !== undefined ? joint.currentValue : 0;
     }
 
-    getRevoluteDelta(joint, startPoint, endPoint) {
+    getRevoluteDelta(joint: Joint, startPoint: THREE.Vector3, endPoint: THREE.Vector3): number {
         const jointObj = this.getJointThreeObject(joint);
         if (!jointObj) {
             return 0;
@@ -340,7 +361,7 @@ export class JointDragControls {
         return delta;
     }
 
-    getPrismaticDelta(joint, startPoint, endPoint) {
+    getPrismaticDelta(joint: Joint, startPoint: THREE.Vector3, endPoint: THREE.Vector3): number {
         const jointObj = this.getJointThreeObject(joint);
         if (!jointObj) return 0;
 
@@ -355,7 +376,7 @@ export class JointDragControls {
         return tempVector.dot(plane.normal);
     }
 
-    moveRay(toRay) {
+    moveRay(toRay: THREE.Ray): void {
         const { raycaster, hitDistance, manipulating } = this;
         const { ray } = raycaster;
 
@@ -392,7 +413,7 @@ export class JointDragControls {
         this.update();
     }
 
-    setGrabbed(grabbed) {
+    setGrabbed(grabbed: boolean): void {
         const { hovered, manipulating } = this;
 
         if (grabbed) {
@@ -430,12 +451,12 @@ export class JointDragControls {
  * Pointer-based joint drag controller
  */
 export class PointerJointDragControls extends JointDragControls {
-    _mouseDown: any;
-    _mouseMove: any;
-    _mouseUp: any;
-    _mouseLeave: any;
+    _mouseDown: (e: MouseEvent) => void;
+    _mouseMove: (e: MouseEvent) => void;
+    _mouseUp: (e: MouseEvent) => void;
+    _mouseLeave: () => void;
 
-    constructor(scene: any, camera: any, domElement: any, model: any) {
+    constructor(scene: THREE.Scene, camera: THREE.Camera, domElement: HTMLElement, model: UnifiedRobotModel | null) {
         super(scene, camera, domElement, model);
         this.camera = camera;
         this.domElement = domElement;
@@ -444,14 +465,14 @@ export class PointerJointDragControls extends JointDragControls {
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
 
-        const updateMouse = (e) => {
+        const updateMouse = (e: MouseEvent) => {
             // Use getBoundingClientRect() to get more accurate coordinates
             const rect = domElement.getBoundingClientRect();
             mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
         };
 
-        this._mouseDown = e => {
+        this._mouseDown = (e: MouseEvent) => {
             if (e.button !== 0) return;
             updateMouse(e);
             raycaster.setFromCamera(mouse, this.camera);
@@ -461,25 +482,7 @@ export class PointerJointDragControls extends JointDragControls {
             if (!this.model || !this.model.threeObject) return;
 
             // Temporarily store and enable visibility for visual meshes to allow raycasting
-            const hiddenMeshes = [];
-            this.model.threeObject.traverse((child) => {
-                if (child.isMesh && !child.visible) {
-                    // Check if it's a visual mesh (not collision)
-                    let isInCollider = false;
-                    let checkNode = child;
-                    while (checkNode) {
-                        if (checkNode.isURDFCollider) {
-                            isInCollider = true;
-                            break;
-                        }
-                        checkNode = checkNode.parent;
-                    }
-                    if (!isInCollider) {
-                        child.visible = true;
-                        hiddenMeshes.push(child);
-                    }
-                }
-            });
+            const hiddenMeshes = temporarilyRevealVisualMeshes(this.model);
 
             const intersections = raycaster.intersectObject(this.model.threeObject, true);
 
@@ -490,26 +493,12 @@ export class PointerJointDragControls extends JointDragControls {
 
             // Filter out collision meshes (but allow invisible visual meshes for interaction)
             const validIntersections = intersections.filter(intersect => {
-                const obj = intersect.object as any;
+                const obj = intersect.object as InteractiveObject;
                 // Skip collision meshes
-                if (obj.isURDFCollider || obj.userData?.isCollision || obj.userData?.isCollisionGeom) {
+                if (!(obj instanceof THREE.Mesh) || obj.isURDFCollider || obj.userData?.isCollision || obj.userData?.isCollisionGeom) {
                     return false;
                 }
-                // Check if object is in collision hierarchy
-                let isInCollider = false;
-                let checkNode: any = obj;
-                while (checkNode) {
-                    if (checkNode.isURDFCollider) {
-                        isInCollider = true;
-                        break;
-                    }
-                    checkNode = checkNode.parent;
-                }
-                if (isInCollider) {
-                    return false;
-                }
-                // Allow all visual meshes
-                return obj.isMesh;
+                return !isColliderObject(obj);
             });
 
             const hitLink = validIntersections.length > 0 ? findParentLink(validIntersections[0].object, this.model) : null;
@@ -522,13 +511,13 @@ export class PointerJointDragControls extends JointDragControls {
             // If not hitting model, don't grab - allow camera controls to work
         };
 
-        this._mouseMove = e => {
+        this._mouseMove = (e: MouseEvent) => {
             updateMouse(e);
             raycaster.setFromCamera(mouse, this.camera);
             this.moveRay(raycaster.ray);
         };
 
-        this._mouseUp = e => {
+        this._mouseUp = (e: MouseEvent) => {
             if (e.button !== 0) return;
             updateMouse(e);
             raycaster.setFromCamera(mouse, this.camera);
@@ -552,7 +541,7 @@ export class PointerJointDragControls extends JointDragControls {
         domElement.addEventListener('mouseleave', this._mouseLeave);
     }
 
-    getRevoluteDelta(joint, startPoint, endPoint) {
+    getRevoluteDelta(joint: Joint, startPoint: THREE.Vector3, endPoint: THREE.Vector3): number {
         const { camera, initialGrabPoint } = this;
 
         const jointObj = this.getJointThreeObject(joint);
@@ -605,4 +594,3 @@ export class PointerJointDragControls extends JointDragControls {
 
 // For backward compatibility, export old names
 export { JointDragControls as URDFDragControls, PointerJointDragControls as PointerURDFDragControls };
-

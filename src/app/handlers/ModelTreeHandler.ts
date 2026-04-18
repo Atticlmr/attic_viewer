@@ -2,18 +2,19 @@
  * Model Tree Handler - Handles model tree panel events
  */
 import * as d3 from 'd3';
+import type { App } from '../App.js';
 
 export class ModelTreeHandler {
-    app: any;
+    app: App;
 
-    constructor(app: any) {
+    constructor(app: App) {
         this.app = app;
     }
 
     /**
      * Setup model tree panel
      */
-    setupModelTreePanel() {
+    setupModelTreePanel(): void {
         const toggleBtn = document.getElementById('toggle-model-tree');
         const floatingPanel = document.getElementById('floating-model-tree');
 
@@ -33,7 +34,7 @@ export class ModelTreeHandler {
                     target.id === 'floating-model-tree') {
 
                     if (this.app.modelGraphView) {
-                        const svg = d3.select('#model-graph-svg');
+                        const svg = d3.select<SVGSVGElement, unknown>('#model-graph-svg');
                         this.app.modelGraphView.clearAllSelections(svg);
                     }
 

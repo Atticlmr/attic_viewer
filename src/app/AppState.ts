@@ -2,12 +2,16 @@
  * Application State Management
  * Centralizes all application state
  */
+import type { ViewerModel, VSCodeFileInfo } from '../types/app.js';
+
+type AngleUnit = 'rad' | 'deg';
+
 export class AppState {
-    currentModel: any;
-    currentMJCFFile: any;
-    currentMJCFModel: any;
-    angleUnit: string;
-    vscodeFileMap: any;
+    currentModel: ViewerModel | null;
+    currentMJCFFile: File | null;
+    currentMJCFModel: ViewerModel | null;
+    angleUnit: AngleUnit;
+    vscodeFileMap: Map<string, VSCodeFileInfo>;
     _isReloading: boolean;
 
     constructor() {
@@ -22,7 +26,7 @@ export class AppState {
     /**
      * Reset state when loading new model
      */
-    reset() {
+    reset(): void {
         this.currentModel = null;
         this.currentMJCFFile = null;
         this.currentMJCFModel = null;
@@ -31,35 +35,41 @@ export class AppState {
     /**
      * Set reloading state
      */
-    setReloading(value) {
+    setReloading(value: boolean): void {
         this._isReloading = value;
     }
 
     /**
      * Check if currently reloading
      */
-    isReloading() {
+    isReloading(): boolean {
         return this._isReloading;
     }
 
     /**
      * Get angle unit
      */
-    getAngleUnit() {
+    getAngleUnit(): AngleUnit {
         return this.angleUnit;
     }
 
     /**
      * Set angle unit
      */
-    setAngleUnit(unit) {
+    setAngleUnit(unit: AngleUnit): void {
         this.angleUnit = unit;
     }
 
     /**
      * Get model info summary
      */
-    getModelSummary() {
+    getModelSummary(): {
+        hasLinks: boolean;
+        hasJoints: boolean;
+        controllableJoints: number;
+        hasConstraints: boolean;
+        rootLink: string | null;
+    } | null {
         if (!this.currentModel) return null;
 
         const model = this.currentModel;
@@ -77,8 +87,8 @@ export class AppState {
 
         if (model.joints) {
             summary.hasJoints = model.joints.size > 0;
-            summary.controllableJoints = Array.from(model.joints.values() as any[])
-                .filter((j: any) => j.type !== 'fixed').length;
+            summary.controllableJoints = Array.from(model.joints.values())
+                .filter(joint => joint.type !== 'fixed').length;
         }
 
         if (model.constraints) {

@@ -12,8 +12,36 @@ type ExportEntry = {
     mimeType: string;
 };
 
+type SourceFormat = RobotFormat | 'xacro' | 'usd' | 'unknown';
+
+interface EditorSnapshotState {
+    currentFile: File | null;
+    currentContent: string;
+}
+
+interface ConversionAppContext {
+    fileHandler?: {
+        getCurrentModelFile?: () => File | null;
+        currentModelFile?: File | null;
+        getFileMap?: () => Map<string, File>;
+        fileMap?: Map<string, File>;
+    };
+    codeEditorManager?: {
+        editorState?: EditorSnapshotState;
+    };
+}
+
+interface CurrentSourceInfo {
+    file: File;
+    format: SourceFormat;
+    fileMap: Map<string, File>;
+    basePath: string;
+    sourcePath: string;
+    sourceContent: BinaryContent | null;
+}
+
 export class ModelConversionController {
-    app: any;
+    app: ConversionAppContext;
     converter: RobotConverter;
     dialogEl: HTMLDivElement | null;
     closeBtn: HTMLButtonElement | null;
@@ -25,7 +53,7 @@ export class ModelConversionController {
     statusEl: HTMLElement | null;
     selectedDirectoryHandle: FileSystemDirectoryHandle | null;
 
-    constructor(app: any) {
+    constructor(app: ConversionAppContext) {
         this.app = app;
         this.converter = new RobotConverter();
         this.converter.registerParser('urdf', new URDFParser());
@@ -127,7 +155,12 @@ export class ModelConversionController {
         }
 
         try {
-            this.selectedDirectoryHandle = await (window as any).showDirectoryPicker({
+            if (!window.showDirectoryPicker) {
+                this.renderStatus('当前浏览器不支持目录选择。', 'warning');
+                return;
+            }
+
+            this.selectedDirectoryHandle = await window.showDirectoryPicker({
                 mode: 'readwrite'
             });
             if (this.pathInput) {
@@ -208,14 +241,7 @@ export class ModelConversionController {
         }
     }
 
-    getCurrentSourceInfo(): {
-        file: File;
-        format: RobotFormat | 'xacro' | 'usd' | 'unknown';
-        fileMap: Map<string, File>;
-        basePath: string;
-        sourcePath: string;
-        sourceContent: BinaryContent | null;
-    } | null {
+    getCurrentSourceInfo(): CurrentSourceInfo | null {
         const currentFile = this.app.fileHandler?.getCurrentModelFile?.() || this.app.fileHandler?.currentModelFile;
         if (!currentFile) {
             return null;
@@ -269,7 +295,7 @@ export class ModelConversionController {
         return normalizePath(longestMatch);
     }
 
-    configureFormatOptions(sourceFormat: RobotFormat | 'xacro' | 'usd' | 'unknown' | null): void {
+    configureFormatOptions(sourceFormat: SourceFormat | null): void {
         if (!this.formatSelect) {
             return;
         }
@@ -343,8 +369,8 @@ export class ModelConversionController {
             return;
         }
 
-        if (typeof (window as any).showSaveFilePicker === 'function') {
-            const handle = await (window as any).showSaveFilePicker({
+        if (window.showSaveFilePicker) {
+            const handle = await window.showSaveFilePicker({
                 suggestedName: fileName,
                 types: [{
                     description: mimeType,
@@ -363,7 +389,7 @@ export class ModelConversionController {
     }
 
     supportsDirectoryPicker(): boolean {
-        return typeof (window as any).showDirectoryPicker === 'function';
+        return typeof window.showDirectoryPicker === 'function';
     }
 
     renderStatus(message: string, level: 'info' | 'success' | 'warning' | 'error' = 'info'): void {
@@ -376,7 +402,7 @@ export class ModelConversionController {
     }
 }
 
-function detectSourceFormat(fileName: string): RobotFormat | 'xacro' | 'usd' | 'unknown' {
+function detectSourceFormat(fileName: string): SourceFormat {
     const ext = fileName.toLowerCase().split('.').pop();
     switch (ext) {
         case 'urdf':

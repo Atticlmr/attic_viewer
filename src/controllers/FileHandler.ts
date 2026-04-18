@@ -4,16 +4,29 @@
  */
 import * as THREE from 'three';
 import { ModelLoaderFactory } from '../loaders/ModelLoaderFactory.js';
-import { readFileContent, getFileFromEntry, getFileTypeFromExtension, getFileDisplayType } from '../utils/FileUtils.js';
+import {
+    readFileContent,
+    getFileFromEntry,
+    getFileTypeFromExtension,
+    type FileSystemDirectoryEntryLike,
+    type FileSystemEntryLike,
+    type FileSystemFileEntryLike
+} from '../utils/FileUtils.js';
+import type { AppFileType, FileWithPath, LoadableFileInfo, ViewerModel } from '../types/app.js';
+import type { USDViewerManager } from '../renderer/USDViewerManager.js';
+import { GeometryType, Link, UnifiedRobotModel, VisualGeometry } from '../models/UnifiedRobotModel.js';
+
+type ModelLoadedCallback = (model: ViewerModel, file: File, isMesh?: boolean, snapshot?: HTMLElement | null) => void;
+type FilesLoadedCallback = (files: LoadableFileInfo[]) => void;
 
 export class FileHandler {
-    fileMap: any;
-    availableModels: any[];
-    currentModelFile: any;
-    onModelLoaded: any;
-    onFilesLoaded: ((files: any[]) => void) | null;
-    usdViewerManager: any;
-    usdViewerInitializer: any;
+    fileMap: Map<string, File>;
+    availableModels: LoadableFileInfo[];
+    currentModelFile: File | null;
+    onModelLoaded: ModelLoadedCallback | null;
+    onFilesLoaded: FilesLoadedCallback | null;
+    usdViewerManager: USDViewerManager | null;
+    usdViewerInitializer: (() => Promise<USDViewerManager>) | null;
 
     constructor() {
         this.fileMap = new Map();
@@ -22,29 +35,30 @@ export class FileHandler {
         this.onModelLoaded = null; // Callback function
         this.onFilesLoaded = null; // Callback for when files are loaded
         this.usdViewerManager = null; // USD viewer manager (lazy loaded)
+        this.usdViewerInitializer = null;
     }
 
     /**
      * Set USD viewer manager
      */
-    setUSDViewerManager(manager) {
+    setUSDViewerManager(manager: USDViewerManager): void {
         this.usdViewerManager = manager;
     }
 
     /**
      * Set USD viewer initializer callback (for lazy loading)
      */
-    setUSDViewerInitializer(initializer) {
+    setUSDViewerInitializer(initializer: () => Promise<USDViewerManager>): void {
         this.usdViewerInitializer = initializer;
     }
 
     /**
      * Setup file drag-drop
      */
-    setupFileDrop() {
+    setupFileDrop(): void {
         const body = document.body;
 
-        const preventDefaults = (e) => {
+        const preventDefaults = (e: Event) => {
             e.preventDefault();
             e.stopPropagation();
         };
@@ -54,13 +68,13 @@ export class FileHandler {
         });
 
         let dragCounter = 0;
-        body.addEventListener('dragenter', (e) => {
+        body.addEventListener('dragenter', () => {
             dragCounter++;
             const dropZone = document.getElementById('drop-zone');
             if (dropZone) dropZone.classList.add('drag-over');
         }, false);
 
-        body.addEventListener('dragleave', (e) => {
+        body.addEventListener('dragleave', () => {
             dragCounter--;
             if (dragCounter === 0) {
                 const dropZone = document.getElementById('drop-zone');
@@ -68,11 +82,11 @@ export class FileHandler {
             }
         }, false);
 
-        body.addEventListener('drop', (e) => {
+        body.addEventListener('drop', (e: DragEvent) => {
             dragCounter = 0;
             const dropZone = document.getElementById('drop-zone');
             if (dropZone) dropZone.classList.remove('drag-over');
-            this.handleDrop(e);
+            void this.handleDrop(e);
         }, false);
     }
 
@@ -80,13 +94,13 @@ export class FileHandler {
     /**
      * Handle file drop
      */
-    async handleDrop(e) {
-        const items = e.dataTransfer.items;
+    async handleDrop(e: DragEvent): Promise<void> {
+        const items = e.dataTransfer?.items;
         if (!items || items.length === 0) return;
 
         this.fileMap.clear();
 
-        const entries = [];
+        const entries: FileSystemEntryLike[] = [];
         for (let i = 0; i < items.length; i++) {
             const item = items[i];
             if (item.webkitGetAsEntry) {
@@ -100,7 +114,10 @@ export class FileHandler {
         if (entries.length > 0) {
             await this.processEntries(entries);
         } else {
-            const files = e.dataTransfer.files;
+            const files = e.dataTransfer?.files;
+            if (!files) {
+                return;
+            }
             if (files.length > 0) {
                 for (const file of files) {
                     // Convert backslash to forward slash for cross-platform compatibility
@@ -127,12 +144,12 @@ export class FileHandler {
     /**
      * Process file system entries
      */
-    async processEntries(entries: any[], basePath = '') {
-        const files: Array<{ file: File; path: string }> = [];
+    async processEntries(entries: FileSystemEntryLike[], basePath = ''): Promise<void> {
+        const files: FileWithPath[] = [];
 
         for (const entry of entries) {
             if (entry.isFile) {
-                const file = await getFileFromEntry(entry);
+                const file = await getFileFromEntry(entry as FileSystemFileEntryLike);
                 // fullPath starts with '/', remove leading slash for relative path
                 const fullPath = entry.fullPath || entry.name;
                 const normalizedPath = basePath 
@@ -145,7 +162,7 @@ export class FileHandler {
                 const normalizedDirPath = basePath
                     ? `${basePath}/${dirFullPath.replace(/^\//, '')}`
                     : dirFullPath.replace(/^\//, '');
-                const dirFiles = await this.readDirectory(entry, normalizedDirPath);
+                const dirFiles = await this.readDirectory(entry as FileSystemDirectoryEntryLike, normalizedDirPath);
                 files.push(...dirFiles);
             }
         }
@@ -170,8 +187,8 @@ export class FileHandler {
     /**
      * Recursively read directory
      */
-    async readDirectory(dirEntry, basePath = ''): Promise<Array<{ file: File; path: string }>> {
-        const files: Array<{ file: File; path: string }> = [];
+    async readDirectory(dirEntry: FileSystemDirectoryEntryLike, basePath = ''): Promise<FileWithPath[]> {
+        const files: FileWithPath[] = [];
 
         return new Promise((resolve, reject) => {
             const reader = dirEntry.createReader();
@@ -185,7 +202,7 @@ export class FileHandler {
 
                     for (const entry of entries) {
                         if (entry.isFile) {
-                            const file = await getFileFromEntry(entry);
+                            const file = await getFileFromEntry(entry as FileSystemFileEntryLike);
                             // Normalize path to prevent duplicates and ensure consistency
                             const fullPath = entry.fullPath || entry.name;
                             const normalizedPath = basePath
@@ -202,7 +219,7 @@ export class FileHandler {
                             const normalizedDirPath = basePath
                                 ? `${basePath}/${dirFullPath.replace(/^\//, '')}`
                                 : dirFullPath.replace(/^\//, '');
-                            const subFiles = await this.readDirectory(entry, normalizedDirPath);
+                            const subFiles = await this.readDirectory(entry as FileSystemDirectoryEntryLike, normalizedDirPath);
                             files.push(...subFiles);
                         }
                     }
@@ -219,20 +236,23 @@ export class FileHandler {
      * Find all loadable files
      * @param files - Array of File objects or {file, path} objects
      */
-    async findAllLoadableFiles(files) {
+    async findAllLoadableFiles(files: Array<File | FileWithPath>): Promise<LoadableFileInfo[]> {
         const supportedExtensions = {
             model: ['urdf', 'xacro', 'xml', 'usd', 'usda', 'usdc', 'usdz'],
             mesh: ['dae', 'stl', 'obj', 'collada']
         };
-        const loadableFiles = [];
+        const loadableFiles: LoadableFileInfo[] = [];
 
-        const checkPromises = files.map(async (fileInput) => {
+        const checkPromises: Array<Promise<LoadableFileInfo | null>> = files.map(async (fileInput) => {
             // Handle both File objects and {file, path} objects
-            const file = fileInput.file || fileInput;
-            const providedPath = fileInput.path;
+            const file = fileInput instanceof File ? fileInput : fileInput.file;
+            const providedPath = fileInput instanceof File ? undefined : fileInput.path;
             // Convert backslash to forward slash for cross-platform compatibility
             const webkitPath = (file.webkitRelativePath || '').replace(/\\/g, '/');
             const ext = file.name.toLowerCase().split('.').pop();
+            if (!ext) {
+                return null;
+            }
 
             if (supportedExtensions.model.includes(ext)) {
                 if (ext === 'xml') {
@@ -245,12 +265,13 @@ export class FileHandler {
                         }
 
                         return {
-                            file: file,
+                            file,
                             name: file.name,
                             type: fileType,
                             path: providedPath || webkitPath || file.name,
-                            category: 'model'
-                        };
+                            category: 'model',
+                            ext
+                        } satisfies LoadableFileInfo;
                     } catch (error) {
                         console.error(`Failed to read XML file: ${file.name}`, error);
                         return null;
@@ -258,21 +279,23 @@ export class FileHandler {
                 } else {
                     const fileType = getFileTypeFromExtension(ext);
                     return {
-                        file: file,
+                        file,
                         name: file.name,
                         type: fileType,
                         path: providedPath || webkitPath || file.name,
-                        category: 'model'
-                    };
+                        category: 'model',
+                        ext
+                    } satisfies LoadableFileInfo;
                 }
             } else if (supportedExtensions.mesh.includes(ext)) {
                 return {
-                    file: file,
+                    file,
                     name: file.name,
                     type: 'mesh',
                     path: providedPath || webkitPath || file.name,
-                    category: 'mesh'
-                };
+                    category: 'mesh',
+                    ext
+                } satisfies LoadableFileInfo;
             }
 
             return null;
@@ -299,7 +322,7 @@ export class FileHandler {
     /**
      * Load file or mesh
      */
-    async loadFileOrMesh(fileInfo) {
+    async loadFileOrMesh(fileInfo: LoadableFileInfo): Promise<void> {
         if (fileInfo.category === 'model') {
             await this.loadFile(fileInfo.file);
         } else if (fileInfo.category === 'mesh') {
@@ -310,7 +333,7 @@ export class FileHandler {
     /**
      * Load model file
      */
-    async loadFile(file) {
+    async loadFile(file: File): Promise<void> {
         this.currentModelFile = file;
 
         try {
@@ -353,7 +376,7 @@ export class FileHandler {
                     { usdViewerManager: this.usdViewerManager }
                 );
 
-                this.onModelLoaded?.(model, file, false, null);
+                this.onModelLoaded?.(model as ViewerModel, file, false, null);
                 document.getElementById('drop-zone')?.classList.remove('show');
                 document.getElementById('drop-zone')?.classList.remove('drag-over');
                 return;
@@ -389,19 +412,20 @@ export class FileHandler {
             );
 
             // Notify model loaded (pass null as snapshot, let main.js create it)
-            this.onModelLoaded?.(model, file, false, null);
+            this.onModelLoaded?.(model as ViewerModel, file, false, null);
 
             document.getElementById('drop-zone')?.classList.remove('show');
             document.getElementById('drop-zone')?.classList.remove('drag-over');
 
         } catch (error) {
             console.error('Failed to load file:', error);
+            const message = error instanceof Error ? error.message : String(error);
 
             // If error message contains USDC related content
-            if (error.message && (error.message.includes('USDC') || error.message.includes('binary format'))) {
+            if (message.includes('USDC') || message.includes('binary format')) {
                 console.error('Cannot load USDC binary format, please convert to USDZ or USDA');
             } else {
-                console.error(`${window.i18n.t('loadFailed')}: ${error.message}`);
+                console.error(`${window.i18n.t('loadFailed')}: ${message}`);
             }
 
             // Remove snapshot if exists
@@ -415,7 +439,7 @@ export class FileHandler {
     /**
      * Detect if file content is USDC binary format
      */
-    isUSDCBinaryContent(content) {
+    isUSDCBinaryContent(content: string): boolean {
         if (!content || typeof content !== 'string') {
             return false;
         }
@@ -452,7 +476,7 @@ export class FileHandler {
     /**
      * Create loading snapshot
      */
-    createLoadingSnapshot() {
+    createLoadingSnapshot(): HTMLDivElement | null {
         const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
         if (!canvas) return null;
 
@@ -490,7 +514,7 @@ export class FileHandler {
     /**
      * Remove loading snapshot
      */
-    removeLoadingSnapshot(snapshot) {
+    removeLoadingSnapshot(snapshot: HTMLElement | null): void {
         if (!snapshot || !snapshot.parentNode) return;
 
         snapshot.style.transition = 'opacity 0.3s ease';
@@ -506,7 +530,7 @@ export class FileHandler {
     /**
      * Load single mesh file as model
      */
-    async loadMeshAsModel(file, fileName) {
+    async loadMeshAsModel(file: File, fileName: string): Promise<void> {
         try {
             const meshObject = await ModelLoaderFactory.loadMeshFileDirect(file, fileName);
 
@@ -516,7 +540,7 @@ export class FileHandler {
 
             // Ensure mesh materials support lighting and shadows
             meshObject.traverse((child) => {
-                if (child.isMesh) {
+                if (child instanceof THREE.Mesh) {
                     if (child.material?.type === 'MeshBasicMaterial') {
                         const oldMaterial = child.material;
                         child.material = new THREE.MeshPhongMaterial({
@@ -536,23 +560,21 @@ export class FileHandler {
                 }
             });
 
-            const simpleMeshModel = {
-                name: fileName,
-                rootLink: 'mesh_root',
-                links: new Map([
-                    ['mesh_root', {
-                        name: 'mesh_root',
-                        threeObject: meshObject,
-                        visuals: [{
-                            threeObject: meshObject,
-                            geometry: { mesh: fileName }
-                        }],
-                        inertial: null
-                    }]
-                ]),
-                joints: new Map(),
-                threeObject: meshObject
-            };
+            const simpleMeshModel: ViewerModel = new UnifiedRobotModel();
+            simpleMeshModel.name = fileName;
+            simpleMeshModel.rootLink = 'mesh_root';
+            simpleMeshModel.threeObject = meshObject;
+
+            const meshLink = new Link('mesh_root');
+            meshLink.threeObject = meshObject;
+
+            const visual = new VisualGeometry();
+            visual.threeObject = meshObject;
+            visual.geometry = new GeometryType('mesh');
+            visual.geometry.filename = fileName;
+            meshLink.visuals.push(visual);
+
+            simpleMeshModel.links.set(meshLink.name, meshLink);
 
             this.currentModelFile = file;
             this.onModelLoaded?.(simpleMeshModel, file, true, null);
@@ -570,22 +592,21 @@ export class FileHandler {
     /**
      * Get file map
      */
-    getFileMap() {
+    getFileMap(): Map<string, File> {
         return this.fileMap;
     }
 
     /**
      * Get available models list
      */
-    getAvailableModels() {
+    getAvailableModels(): LoadableFileInfo[] {
         return this.availableModels;
     }
 
     /**
      * Get current model file
      */
-    getCurrentModelFile() {
+    getCurrentModelFile(): File | null {
         return this.currentModelFile;
     }
 }
-

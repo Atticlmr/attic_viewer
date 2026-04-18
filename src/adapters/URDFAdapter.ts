@@ -5,6 +5,50 @@
 import * as THREE from 'three';
 import { UnifiedRobotModel, Link, Joint, JointLimits, VisualGeometry, CollisionGeometry, InertialProperties } from '../models/UnifiedRobotModel.js';
 
+interface URDFOriginLike {
+    xyz?: number[];
+    rpy?: number[];
+}
+
+interface URDFLimitLike {
+    lower?: number;
+    upper?: number;
+    effort?: number;
+    velocity?: number;
+}
+
+interface URDFInertialLike {
+    mass?: number;
+    origin?: URDFOriginLike;
+    ixx?: number;
+    iyy?: number;
+    izz?: number;
+    ixy?: number;
+    ixz?: number;
+    iyz?: number;
+}
+
+interface URDFLinkObjectLike extends THREE.Object3D {
+    inertial?: URDFInertialLike;
+}
+
+interface URDFJointObjectLike extends THREE.Object3D {
+    jointType?: string;
+    child?: THREE.Object3D | null;
+    origin?: URDFOriginLike;
+    axis?: { xyz?: number[] };
+    limit?: URDFLimitLike;
+    angle?: number;
+    jointValue?: number | number[];
+    setJointValue?: (value: number) => void;
+    setAngle?: (value: number) => void;
+}
+
+interface URDFRobotLike extends THREE.Group {
+    links?: Record<string, URDFLinkObjectLike>;
+    joints?: Record<string, URDFJointObjectLike>;
+}
+
 export class URDFAdapter {
     /**
      * Convert urdf-loaders robot object to unified model
@@ -12,7 +56,7 @@ export class URDFAdapter {
      * @param {string} urdfXML - Original URDF XML content (optional, for extracting inertial data)
      * @returns {UnifiedRobotModel}
      */
-    static convert(robot, urdfXML = null) {
+    static convert(robot: URDFRobotLike, urdfXML: string | null = null): UnifiedRobotModel {
         const model = new UnifiedRobotModel();
         model.name = robot.name || 'robot';
         model.threeObject = robot;
@@ -27,13 +71,13 @@ export class URDFAdapter {
         }
 
         // If XML provided, parse inertial data
-        let inertialData = {};
+        let inertialData: Record<string, InertialProperties> = {};
         if (urdfXML) {
             inertialData = this.parseInertialFromXML(urdfXML);
         }
 
         // Convert links
-        Object.values(robot.links as any).forEach((urdfLink: any) => {
+        Object.values(robot.links).forEach((urdfLink: URDFLinkObjectLike) => {
             const link = this.convertLink(urdfLink);
 
             // If urdf-loader didn't parse inertial, get from XML
@@ -77,7 +121,7 @@ export class URDFAdapter {
      * Applies consistent shininess and specular properties to all materials
      * Directly modifies materials in place to ensure changes persist
      */
-    static enhanceMaterials(robotObject) {
+    static enhanceMaterials(robotObject: THREE.Object3D): void {
         robotObject.traverse((child) => {
             if (child.isMesh && child.material) {
                 // Handle material arrays
@@ -97,7 +141,7 @@ export class URDFAdapter {
      * Returns enhanced material (may be cloned or modified in place)
      * Saves original properties for lighting toggle
      */
-    static enhanceSingleMaterial(material) {
+    static enhanceSingleMaterial(material: THREE.Material): THREE.Material {
         if (material.isMeshPhongMaterial || material.isMeshStandardMaterial) {
             // Save original properties if not already saved (for lighting toggle)
             if (material.userData.originalShininess === undefined) {
@@ -184,7 +228,7 @@ export class URDFAdapter {
         return material;
     }
 
-    static convertLink(urdfLink) {
+    static convertLink(urdfLink: URDFLinkObjectLike): Link {
         const link = new Link(urdfLink.name);
         link.threeObject = urdfLink;
 
@@ -199,7 +243,7 @@ export class URDFAdapter {
         return link;
     }
 
-    static convertJoint(urdfJoint) {
+    static convertJoint(urdfJoint: URDFJointObjectLike): Joint {
         // URDF joint object has jointType property (not type)
         const jointType = urdfJoint.jointType || urdfJoint.type || 'fixed';
         const joint = new Joint(urdfJoint.name, jointType);
@@ -213,7 +257,7 @@ export class URDFAdapter {
             joint.child = urdfJoint.child.name;
         } else if (urdfJoint.children && urdfJoint.children.length > 0) {
             // Find Link object from children array
-            const childLink = urdfJoint.children.find(child =>
+            const childLink = urdfJoint.children.find((child: THREE.Object3D) =>
                 child.isURDFLink || child.type === 'URDFLink'
             );
             if (childLink) {
@@ -245,13 +289,15 @@ export class URDFAdapter {
         if (urdfJoint.angle !== undefined) {
             joint.currentValue = urdfJoint.angle;
         } else if (urdfJoint.jointValue !== undefined) {
-            joint.currentValue = urdfJoint.jointValue;
+            joint.currentValue = Array.isArray(urdfJoint.jointValue)
+                ? (urdfJoint.jointValue[0] ?? 0)
+                : urdfJoint.jointValue;
         }
 
         return joint;
     }
 
-    static convertLimits(limit) {
+    static convertLimits(limit: URDFLimitLike): JointLimits {
         const limits = new JointLimits();
         if (limit.lower !== undefined) limits.lower = limit.lower;
         if (limit.upper !== undefined) limits.upper = limit.upper;
@@ -264,7 +310,7 @@ export class URDFAdapter {
      * Supplement joint effort and velocity information from URDF XML
      * (because urdf-loaders may not have parsed these attributes)
      */
-    static supplementJointLimitsFromXML(model, urdfXML) {
+    static supplementJointLimitsFromXML(model: UnifiedRobotModel, urdfXML: string): void {
         try {
             const parser = new DOMParser();
             const doc = parser.parseFromString(urdfXML, 'text/xml');
@@ -309,7 +355,7 @@ export class URDFAdapter {
         }
     }
 
-    static convertInertial(inertial) {
+    static convertInertial(inertial: URDFInertialLike): InertialProperties {
         const props = new InertialProperties();
         if (inertial.mass !== undefined) props.mass = inertial.mass;
         if (inertial.origin) {
@@ -332,8 +378,8 @@ export class URDFAdapter {
      * @param {string} xmlContent - URDF XML content
      * @returns {Object} Mapping from link names to inertial data
      */
-    static parseInertialFromXML(xmlContent) {
-        const inertialData = {};
+    static parseInertialFromXML(xmlContent: string): Record<string, InertialProperties> {
+        const inertialData: Record<string, InertialProperties> = {};
 
         try {
             const parser = new DOMParser();
@@ -395,47 +441,48 @@ export class URDFAdapter {
      * Set joint angle (using urdf-loaders' setJointValue method)
      * Reference URDFClasses.js setJointValue implementation
      */
-    static setJointAngle(joint, angle, ignoreLimits = false) {
+    static setJointAngle(joint: Joint, angle: number, ignoreLimits = false): void {
         joint.currentValue = angle;
 
         // URDF format: use urdf-loader's setJointValue method
-        if (joint.threeObject) {
+        const jointObject = joint.threeObject as URDFJointObjectLike | null;
+        if (jointObject) {
             // If ignoring limits, temporarily modify URDF joint object's limit values
             let originalLimits = null;
-            if (ignoreLimits && joint.threeObject.limit) {
+            if (ignoreLimits && jointObject.limit) {
                 originalLimits = {
-                    lower: joint.threeObject.limit.lower,
-                    upper: joint.threeObject.limit.upper
+                    lower: jointObject.limit.lower,
+                    upper: jointObject.limit.upper
                 };
-                joint.threeObject.limit.lower = -Math.PI * 2;
-                joint.threeObject.limit.upper = Math.PI * 2;
+                jointObject.limit.lower = -Math.PI * 2;
+                jointObject.limit.upper = Math.PI * 2;
             }
 
             // Prefer setJointValue method (urdf-loader's standard method)
-            if (typeof joint.threeObject.setJointValue === 'function') {
-                joint.threeObject.setJointValue(angle);
+            if (typeof jointObject.setJointValue === 'function') {
+                jointObject.setJointValue(angle);
 
                 // Restore original limits
-                if (originalLimits && joint.threeObject.limit) {
-                    joint.threeObject.limit.lower = originalLimits.lower;
-                    joint.threeObject.limit.upper = originalLimits.upper;
+                if (originalLimits && jointObject.limit) {
+                    jointObject.limit.lower = originalLimits.lower;
+                    jointObject.limit.upper = originalLimits.upper;
                 }
                 return;
-            } else if (typeof joint.threeObject.setAngle === 'function') {
-                joint.threeObject.setAngle(angle);
+            } else if (typeof jointObject.setAngle === 'function') {
+                jointObject.setAngle(angle);
 
                 // Restore original limits
-                if (originalLimits && joint.threeObject.limit) {
-                    joint.threeObject.limit.lower = originalLimits.lower;
-                    joint.threeObject.limit.upper = originalLimits.upper;
+                if (originalLimits && jointObject.limit) {
+                    jointObject.limit.lower = originalLimits.lower;
+                    jointObject.limit.upper = originalLimits.upper;
                 }
                 return;
             }
 
             // Restore original limits (if none of the above methods executed)
-            if (originalLimits && joint.threeObject.limit) {
-                joint.threeObject.limit.lower = originalLimits.lower;
-                joint.threeObject.limit.upper = originalLimits.upper;
+            if (originalLimits && jointObject.limit) {
+                jointObject.limit.lower = originalLimits.lower;
+                jointObject.limit.upper = originalLimits.upper;
             }
 
             // If none available, manually set rotation
@@ -444,13 +491,13 @@ export class URDFAdapter {
             if (joint.type === 'revolute' || joint.type === 'continuous') {
                 const axis = joint.axis ? new THREE.Vector3(...joint.axis.xyz).normalize() : new THREE.Vector3(0, 0, 1);
                 // Note: joint.threeObject may not be a Three.js object, cannot directly set rotation
-                if (joint.threeObject.rotation) {
-                    joint.threeObject.rotation.setFromAxisAngle(axis, angle);
+                if (jointObject.quaternion) {
+                    jointObject.quaternion.setFromAxisAngle(axis, angle);
                 }
             } else if (joint.type === 'prismatic') {
                 const axis = joint.axis ? new THREE.Vector3(...joint.axis.xyz).normalize() : new THREE.Vector3(1, 0, 0);
-                if (joint.threeObject.position) {
-                    joint.threeObject.position.copy(axis.multiplyScalar(angle));
+                if (jointObject.position) {
+                    jointObject.position.copy(axis.multiplyScalar(angle));
                 }
             }
         } else {
@@ -458,4 +505,3 @@ export class URDFAdapter {
         }
     }
 }
-

@@ -4,34 +4,154 @@
  * Does not use iframe, runs in the same rendering layer
  */
 import * as THREE from 'three';
+import type { UnifiedRobotModel } from '../models/UnifiedRobotModel.js';
 import { DragStateManager } from '../utils/DragStateManager.js';
 import { MathUtils } from '../utils/MathUtils.js';
 import { CoordinateAxesManager } from './CoordinateAxesManager.js';
 import { InertialVisualization } from './InertialVisualization.js';
 import { VisualizationManager } from './VisualizationManager.js';
+import type { SceneManager } from './SceneManager.js';
+
+type NumericArrayLike = ArrayLike<number>;
+type MutableNumericArrayLike = { length: number; [index: number]: number };
+type BinaryArrayLike = Float32Array | Uint8Array | Uint16Array | Uint32Array | Int32Array;
+type BodyGroup = THREE.Group & { bodyID?: number };
+
+interface MujocoEnumValue {
+    value: number;
+}
+
+interface MujocoFSLike {
+    mkdir(path: string): void;
+    mount(fs: unknown, options: { root: string }, path: string): void;
+    writeFile(path: string, data: string | Uint8Array): void;
+    stat(path: string): { mode: number };
+    analyzePath(path: string): { exists: boolean };
+    readdir(path: string): string[];
+    unlink(path: string): void;
+    rmdir(path: string): void;
+    isDir(mode: number): boolean;
+}
+
+interface MujocoModelLike {
+    names: ArrayBuffer | ArrayLike<number>;
+    ngeom: number;
+    nbody: number;
+    njnt: number;
+    geom_group: NumericArrayLike;
+    geom_bodyid: NumericArrayLike;
+    geom_type: NumericArrayLike;
+    geom_size: NumericArrayLike;
+    geom_dataid: NumericArrayLike;
+    geom_rgba: NumericArrayLike;
+    geom_pos: NumericArrayLike;
+    geom_quat: NumericArrayLike;
+    name_bodyadr: NumericArrayLike;
+    name_meshadr: NumericArrayLike;
+    body_mass: NumericArrayLike;
+    body_ipos: NumericArrayLike;
+    body_iquat?: NumericArrayLike;
+    body_inertia: NumericArrayLike;
+    jnt_type: NumericArrayLike;
+    jnt_bodyid: NumericArrayLike;
+    jnt_axis: NumericArrayLike;
+    jnt_pos: NumericArrayLike;
+    mesh_vert: Float32Array;
+    mesh_vertadr: NumericArrayLike;
+    mesh_vertnum: NumericArrayLike;
+    mesh_normal: Float32Array;
+    mesh_face: Uint16Array | Uint32Array | Int32Array;
+    mesh_faceadr: NumericArrayLike;
+    mesh_facenum: NumericArrayLike;
+    opt: {
+        timestep: number;
+    };
+    getOptions?: () => { timestep: number };
+    delete?: () => void;
+}
+
+interface MujocoSimulationLike {
+    resetData(): void;
+    forward(): void;
+    step(): void;
+    free?(): void;
+    xpos: NumericArrayLike;
+    xquat: NumericArrayLike;
+}
+
+interface MujocoDataLike {
+    qfrc_applied: MutableNumericArrayLike;
+    xpos: NumericArrayLike;
+    xquat: NumericArrayLike;
+    delete?: () => void;
+}
+
+interface MujocoModuleLike {
+    FS: MujocoFSLike;
+    MEMFS: unknown;
+    Model?: {
+        load_from_xml(path: string): MujocoModelLike;
+    };
+    MjModel?: {
+        loadFromXML(path: string): MujocoModelLike;
+    };
+    State: new (model: MujocoModelLike) => unknown;
+    Simulation: new (model: MujocoModelLike, state: unknown) => MujocoSimulationLike;
+    MjData: new (model: MujocoModelLike) => MujocoDataLike;
+    mj_resetData(model: MujocoModelLike, data: MujocoDataLike): void;
+    mj_forward(model: MujocoModelLike, data: MujocoDataLike): void;
+    mj_applyFT(
+        model: MujocoModelLike,
+        data: MujocoDataLike,
+        force: [number, number, number],
+        torque: [number, number, number],
+        point: [number, number, number],
+        bodyID: number,
+        qfrcApplied: MutableNumericArrayLike
+    ): void;
+    mj_step(model: MujocoModelLike, data: MujocoDataLike): void;
+    mjtGeom: {
+        mjGEOM_SPHERE: MujocoEnumValue;
+        mjGEOM_CAPSULE: MujocoEnumValue;
+        mjGEOM_CYLINDER: MujocoEnumValue;
+        mjGEOM_BOX: MujocoEnumValue;
+        mjGEOM_ELLIPSOID: MujocoEnumValue;
+        mjGEOM_MESH: MujocoEnumValue;
+    };
+    mjtJoint: {
+        mjJNT_HINGE: MujocoEnumValue;
+        mjJNT_BALL: MujocoEnumValue;
+    };
+}
+
+interface MujocoSimulationParams {
+    paused: boolean;
+    ctrlnoiserate: number;
+    ctrlnoisestd: number;
+}
 
 export class MujocoSimulationManager {
-    sceneManager: any;
-    mujoco: any;
-    model: any;
-    simulation: any;
-    state: any;
-    data: any;
-    bodies: any;
-    bodyToThreeMap: any;
-    lights: any[];
-    mujocoRoot: any;
-    dragStateManager: any;
-    originalModel: any;
-    params: any;
+    sceneManager: SceneManager;
+    mujoco: MujocoModuleLike | null;
+    model: MujocoModelLike | null;
+    simulation: MujocoSimulationLike | null;
+    state: unknown;
+    data: MujocoDataLike | null;
+    bodies: Record<number, BodyGroup>;
+    bodyToThreeMap: Map<number, THREE.Object3D>;
+    lights: THREE.Light[];
+    mujocoRoot: THREE.Group | null;
+    dragStateManager: DragStateManager | null;
+    originalModel: UnifiedRobotModel | null;
+    params: MujocoSimulationParams;
     mujoco_time: number;
-    tmpVec: any;
-    tmpQuat: any;
+    tmpVec: THREE.Vector3;
+    tmpQuat: THREE.Quaternion;
     isLoaded: boolean;
     isSimulating: boolean;
     isOldAPI: boolean;
 
-    constructor(sceneManager: any) {
+    constructor(sceneManager: SceneManager) {
         this.sceneManager = sceneManager;
         this.mujoco = null;
         this.model = null;
@@ -73,7 +193,7 @@ export class MujocoSimulationManager {
         try {
             // Import from mujoco-js npm package
             const load_mujoco = (await import('mujoco-js/dist/mujoco_wasm.js')).default;
-            this.mujoco = await load_mujoco();
+            this.mujoco = await load_mujoco() as unknown as MujocoModuleLike;
 
             // Setup virtual file system
             this.mujoco.FS.mkdir('/working');
@@ -736,7 +856,7 @@ export class MujocoSimulationManager {
                         } else if (visual.threeObject) {
                             // Try to extract rgba from material
                             visual.threeObject.traverse((child) => {
-                                if (child.isMesh && child.material && !rgbaFromOriginal) {
+                                if (child instanceof THREE.Mesh && child.material && !rgbaFromOriginal && !Array.isArray(child.material)) {
                                     const matColor = child.material.color;
                                     rgbaFromOriginal = {
                                         r: matColor.r,
@@ -907,7 +1027,7 @@ export class MujocoSimulationManager {
             const mesh = new THREE.Mesh(geometry, finalMaterial);
             mesh.castShadow = group !== 3;  // Collision geoms don't cast shadows
             mesh.receiveShadow = group !== 3;
-            (mesh as any).bodyID = b;
+            mesh.bodyID = b;
 
             // Mark collision geom and set initial visibility
             if (group === 3) {
@@ -1622,4 +1742,3 @@ export class MujocoSimulationManager {
         return this.isLoaded;
     }
 }
-

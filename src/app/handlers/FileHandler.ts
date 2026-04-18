@@ -1,18 +1,22 @@
 /**
  * File Handler - Handles file click events
  */
-export class FileHandler {
-    app: any;
+import type { App } from '../App.js';
+import type { AppFileType, LoadableFileInfo, VSCodeFileInfo } from '../../types/app.js';
 
-    constructor(app: any) {
+export class FileHandler {
+    app: App;
+
+    constructor(app: App) {
         this.app = app;
     }
 
     /**
      * Detect file type from extension
      */
-    detectFileType(filename) {
-        const ext = filename.split('.').pop().toLowerCase();
+    detectFileType(filename: string): AppFileType {
+        const ext = filename.split('.').pop()?.toLowerCase();
+        if (!ext) return 'unknown';
         if (['urdf', 'xacro'].includes(ext)) return 'urdf';
         if (['mjcf', 'xml'].includes(ext)) return 'mjcf';
         if (['usd', 'usda', 'usdc', 'usdz'].includes(ext)) return 'usd';
@@ -23,7 +27,7 @@ export class FileHandler {
     /**
      * Handle file click
      */
-    handleFileClick(fileInfo) {
+    handleFileClick(fileInfo: LoadableFileInfo): void {
         const ext = fileInfo.ext;
         const modelExts = ['urdf', 'xacro', 'xml', 'usd', 'usda', 'usdc', 'usdz'];
         const meshExts = ['dae', 'stl', 'obj', 'collada'];
@@ -46,7 +50,7 @@ export class FileHandler {
     /**
      * Handle file loaded from VSCode
      */
-    async handleVSCodeFile(fileInfo) {
+    async handleVSCodeFile(fileInfo: VSCodeFileInfo): Promise<void> {
         try {
             console.log('Loading model from VSCode:', fileInfo.name);
 
@@ -67,13 +71,13 @@ export class FileHandler {
             await this.app.fileHandler.loadFile(file);
 
             // Update file tree
-            const loadableFiles = [{
+            const loadableFiles: LoadableFileInfo[] = [{
                 file: file,
                 name: fileInfo.name,
                 type: this.detectFileType(fileInfo.name),
                 path: fileInfo.path,
                 category: 'model',
-                ext: fileInfo.name.split('.').pop().toLowerCase()
+                ext: fileInfo.name.split('.').pop()?.toLowerCase() || ''
             }];
 
             this.app.fileHandler.availableModels = loadableFiles;
@@ -87,8 +91,9 @@ export class FileHandler {
             }
         } catch (error) {
             console.error('Failed to load model from VSCode:', error);
+            const message = error instanceof Error ? error.message : String(error);
             if (typeof window.vscodeAdapter !== 'undefined') {
-                window.vscodeAdapter.showError(`Failed to load model: ${error.message}`);
+                window.vscodeAdapter.showError(`Failed to load model: ${message}`);
             }
         }
     }

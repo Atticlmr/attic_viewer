@@ -3,10 +3,41 @@
  * Selects appropriate adapter based on file type
  */
 import * as THREE from 'three';
+import type { Collada } from 'three/examples/jsm/loaders/ColladaLoader.js';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { URDFAdapter } from '../adapters/URDFAdapter.js';
 import { MJCFAdapter } from '../adapters/MJCFAdapter.js';
 import { USDAdapter } from '../adapters/USDAdapter.js';
 import { XacroAdapter } from '../adapters/XacroAdapter.js';
+
+interface URDFLoaderLike {
+    parseCollision: boolean;
+    packages?: Record<string, string>;
+    manager: THREE.LoadingManager;
+    loadMeshCb?: (
+        path: string,
+        manager: THREE.LoadingManager,
+        onComplete: (result: THREE.Object3D | null, error?: Error | null) => void
+    ) => void;
+    defaultMeshLoader?: (
+        path: string,
+        manager: THREE.LoadingManager,
+        onComplete: (result: THREE.Object3D | null, error?: Error | null) => void
+    ) => void;
+    load: (
+        path: string,
+        onLoad: (robot: THREE.Group) => void,
+        onProgress?: unknown,
+        onError?: (error: Error) => void
+    ) => void;
+}
+
+type URDFLoaderConstructor = new () => URDFLoaderLike;
+type URDFLoaderModule = {
+    URDFLoader?: URDFLoaderConstructor;
+    default?: URDFLoaderConstructor;
+};
+type URDFMeshLoader = NonNullable<URDFLoaderLike['loadMeshCb']>;
 
 export class ModelLoaderFactory {
     /**
@@ -134,10 +165,14 @@ export class ModelLoaderFactory {
      */
     static async loadURDF(content, fileName, fileMap = null, file = null) {
         // Dynamically import urdf-loader
-        let URDFLoader: any;
+        let URDFLoader: URDFLoaderConstructor;
         try {
-            const urdfModule = await import('urdf-loader') as any;
-            URDFLoader = urdfModule.URDFLoader || urdfModule.default || urdfModule;
+            const urdfModule = await import('urdf-loader') as unknown as URDFLoaderModule;
+            const ResolvedURDFLoader = urdfModule.URDFLoader || urdfModule.default;
+            if (!ResolvedURDFLoader) {
+                throw new Error('URDFLoader constructor not found');
+            }
+            URDFLoader = ResolvedURDFLoader;
         } catch (error) {
             throw new Error('Failed to load urdf-loader: ' + error.message);
         }
@@ -300,7 +335,9 @@ export class ModelLoaderFactory {
                 loader.manager.setURLModifier(urlModifier);
 
                 // Custom loadMeshCb to load mesh files from fileMap
-                const originalLoadMeshCb = loader.loadMeshCb || loader.defaultMeshLoader.bind(loader);
+                const originalLoadMeshCb: URDFMeshLoader = loader.loadMeshCb
+                    || loader.defaultMeshLoader?.bind(loader)
+                    || ((path, _manager, done) => done(null, new Error(`No mesh loader available for ${path}`)));
                 loader.loadMeshCb = (path, manager, done) => {
                     // Use Promise but don't await, let loading happen in background
                     this.findFileInMapByPath(path, fileMap, urdfDir).then(file => {
@@ -680,7 +717,7 @@ export class ModelLoaderFactory {
                 case 'dae':
                     const { ColladaLoader } = await import('three/examples/jsm/loaders/ColladaLoader.js');
                     const colladaLoader = new ColladaLoader();
-                    const colladaModel: any = await new Promise((resolve, reject) => {
+                    const colladaModel = await new Promise<Collada>((resolve, reject) => {
                         colladaLoader.load(blobUrl, resolve, undefined, reject);
                     });
                     // ColladaLoader returns scene
@@ -718,7 +755,7 @@ export class ModelLoaderFactory {
                 case 'glb':
                     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
                     const gltfLoader = new GLTFLoader();
-                    const gltfModel: any = await new Promise((resolve, reject) => {
+                    const gltfModel = await new Promise<GLTF>((resolve, reject) => {
                         gltfLoader.load(blobUrl, resolve, undefined, reject);
                     });
                     meshObject = gltfModel.scene || gltfModel;
@@ -768,7 +805,7 @@ export class ModelLoaderFactory {
                 case 'dae': {
                     const { ColladaLoader } = await import('three/examples/jsm/loaders/ColladaLoader.js');
                     const colladaLoader = new ColladaLoader(manager);
-                    const colladaModel: any = await new Promise((resolve, reject) => {
+                    const colladaModel = await new Promise<Collada>((resolve, reject) => {
                         colladaLoader.load(blobUrl, resolve, undefined, reject);
                     });
                     // ColladaLoader returns an object, scene property is the scene
@@ -807,7 +844,7 @@ export class ModelLoaderFactory {
                 case 'glb': {
                     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
                     const gltfLoader = new GLTFLoader(manager);
-                    const gltfModel: any = await new Promise((resolve, reject) => {
+                    const gltfModel = await new Promise<GLTF>((resolve, reject) => {
                         gltfLoader.load(blobUrl, resolve, undefined, reject);
                     });
                     meshObject = gltfModel.scene;
@@ -889,4 +926,3 @@ export class ModelLoaderFactory {
         }
     }
 }
-

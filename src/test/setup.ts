@@ -1,14 +1,33 @@
 // Test setup file
 import { vi } from 'vitest';
 
-// Declare global for TypeScript
-declare const global: any;
+type MockElement = {
+  style: Record<string, unknown>;
+  classList: {
+    add: ReturnType<typeof vi.fn>;
+    remove: ReturnType<typeof vi.fn>;
+  };
+  appendChild: ReturnType<typeof vi.fn>;
+  querySelector: ReturnType<typeof vi.fn>;
+  querySelectorAll: ReturnType<typeof vi.fn>;
+};
+
+type MockDocument = {
+  getElementById: ReturnType<typeof vi.fn>;
+  createElement: ReturnType<typeof vi.fn>;
+  body: {
+    appendChild: ReturnType<typeof vi.fn>;
+    removeChild: ReturnType<typeof vi.fn>;
+  };
+};
+
+const testGlobal = globalThis as Record<string, unknown>;
 
 // Mock window and document objects for Node.js environment
-global.window = global.window || {};
-global.document = global.document || {
+testGlobal.window = (testGlobal.window as Record<string, unknown> | undefined) || {};
+testGlobal.document = (testGlobal.document as MockDocument | undefined) || {
   getElementById: vi.fn(),
-  createElement: vi.fn(() => ({
+  createElement: vi.fn((): MockElement => ({
     style: {},
     classList: { add: vi.fn(), remove: vi.fn() },
     appendChild: vi.fn(),
@@ -22,12 +41,13 @@ global.document = global.document || {
 };
 
 // Mock requestAnimationFrame
-global.requestAnimationFrame = (cb: any) => setTimeout(cb, 0);
-global.cancelAnimationFrame = (id: any) => clearTimeout(id);
+testGlobal.requestAnimationFrame = (cb: FrameRequestCallback) =>
+  setTimeout(() => cb(Date.now()), 0);
+testGlobal.cancelAnimationFrame = (id: ReturnType<typeof setTimeout>) => clearTimeout(id);
 
 // Mock performance.now
 if (typeof performance === 'undefined') {
-  global.performance = { now: Date.now };
+  testGlobal.performance = { now: Date.now };
 }
 
 // Mock THREE.js - avoid loading the actual library in tests

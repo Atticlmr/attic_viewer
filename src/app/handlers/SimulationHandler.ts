@@ -1,17 +1,19 @@
 /**
  * Simulation Handler - Handles MuJoCo simulation events
  */
-export class SimulationHandler {
-    app: any;
+import type { App } from '../App.js';
 
-    constructor(app: any) {
+export class SimulationHandler {
+    app: App;
+
+    constructor(app: App) {
         this.app = app;
     }
 
     /**
      * Handle MuJoCo reset
      */
-    handleMujocoReset() {
+    handleMujocoReset(): void {
         if (this.app.mujocoSimulationManager) {
             // Only reset simulation state, don't change run/pause state
             this.app.mujocoSimulationManager.reset();
@@ -21,7 +23,7 @@ export class SimulationHandler {
     /**
      * Handle MuJoCo simulation toggle
      */
-    async handleMujocoToggleSimulate() {
+    async handleMujocoToggleSimulate(): Promise<boolean> {
         // If simulation not loaded, load first
         if (!this.app.mujocoSimulationManager.hasScene() &&
             this.app.state.currentMJCFFile &&

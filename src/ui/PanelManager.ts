@@ -2,11 +2,29 @@
  * PanelManager - Panel drag and resize management module
  * Responsible for drag, resize, and Z-index management of all floating panels
  */
+import type { ModelGraphView } from '../views/ModelGraphView.js';
+
+interface PanelRegistration {
+    panel: PanelElement;
+    header: Element;
+}
+
+interface GraphTransformState {
+    x: number;
+    y: number;
+    k: number;
+}
+
+type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+
+type PanelElement = HTMLElement & {
+    _resizeFrame?: number | null;
+};
 
 export class PanelManager {
-    panels: any;
-    modelGraphOriginalTransform: any;
-    modelGraphView: any;
+    panels: Map<string, PanelRegistration>;
+    modelGraphOriginalTransform: GraphTransformState | null;
+    modelGraphView: ModelGraphView | null;
 
     constructor() {
         this.panels = new Map();
@@ -17,15 +35,15 @@ export class PanelManager {
     /**
      * Set ModelGraphView instance reference
      */
-    setModelGraphView(modelGraphView) {
+    setModelGraphView(modelGraphView: ModelGraphView): void {
         this.modelGraphView = modelGraphView;
     }
 
     /**
      * Register panel
      */
-    registerPanel(panelId, headerSelector = '.floating-panel-header') {
-        const panel = document.getElementById(panelId);
+    registerPanel(panelId: string, headerSelector = '.floating-panel-header'): void {
+        const panel = document.getElementById(panelId) as PanelElement | null;
         const header = panel?.querySelector(headerSelector);
 
         if (!panel || !header) {
@@ -39,19 +57,19 @@ export class PanelManager {
     /**
      * Setup panel drag and resize
      */
-    setupPanelDragAndResize(panel, header) {
+    setupPanelDragAndResize(panel: PanelElement, header: Element): void {
         let isDragging = false;
         let isResizing = false;
-        let resizeDirection = null;
-        let currentX, currentY, initialX, initialY;
+        let resizeDirection: ResizeDirection | null = null;
+        let currentX = 0, currentY = 0, initialX = 0, initialY = 0;
         let xOffset = 0, yOffset = 0;
-        let startWidth, startHeight;
-        let startTransformX, startTransformY;
+        let startWidth = 0, startHeight = 0;
+        let startTransformX = 0, startTransformY = 0;
 
         const resizeBorderWidth = 12;
 
         // Bring to front
-        const bringToFront = () => {
+        const bringToFront = (): void => {
             const allPanels = document.querySelectorAll('.floating-panel, #code-editor-panel');
             let maxZIndex = 50;
 
@@ -62,11 +80,11 @@ export class PanelManager {
                 }
             });
 
-            panel.style.zIndex = maxZIndex + 1;
+            panel.style.zIndex = String(maxZIndex + 1);
         };
 
         // Mouse move to detect edges
-        panel.addEventListener('mousemove', (e) => {
+        panel.addEventListener('mousemove', (e: MouseEvent) => {
             if (isDragging || isResizing) return;
 
             const rect = panel.getBoundingClientRect();
@@ -111,10 +129,11 @@ export class PanelManager {
         });
 
         // Mouse down to start drag or resize
-        panel.addEventListener('mousedown', (e) => {
+        panel.addEventListener('mousedown', (e: MouseEvent) => {
             bringToFront();
 
-            if (e.target === header || header.contains(e.target)) {
+            const target = e.target as Node | null;
+            if (target && (target === header || header.contains(target))) {
                 return;
             }
 
@@ -142,10 +161,14 @@ export class PanelManager {
         });
 
         // Drag start
-        const dragStart = (e) => {
+        const dragStart = (e: MouseEvent): void => {
             bringToFront();
 
-            const target = e.target;
+            const target = e.target as HTMLElement | null;
+            if (!target) {
+                return;
+            }
+
             if (target.tagName === 'BUTTON' || target.tagName === 'SELECT' ||
                 target.closest('button') || target.closest('.code-editor-actions')) {
                 return;
@@ -155,7 +178,7 @@ export class PanelManager {
                 initialX = e.clientX - xOffset;
                 initialY = e.clientY - yOffset;
                 isDragging = true;
-                header.style.cursor = 'grabbing';
+                (header as HTMLElement).style.cursor = 'grabbing';
 
                 // Disable transition animation during drag to avoid delay
                 panel.style.transition = 'none';
@@ -165,7 +188,7 @@ export class PanelManager {
             }
         };
 
-        const drag = (e) => {
+        const drag = (e: MouseEvent): void => {
             if (isDragging) {
                 e.preventDefault();
                 currentX = e.clientX - initialX;
@@ -176,9 +199,9 @@ export class PanelManager {
             }
         };
 
-        const dragEnd = () => {
+        const dragEnd = (): void => {
             isDragging = false;
-            header.style.cursor = 'move';
+            (header as HTMLElement).style.cursor = 'move';
 
             // Restore transition animation after drag ends
             panel.style.transition = '';
@@ -187,7 +210,7 @@ export class PanelManager {
             document.removeEventListener('mouseup', dragEnd);
         };
 
-        const resize = (e) => {
+        const resize = (e: MouseEvent): void => {
             if (!isResizing) return;
             e.preventDefault();
 
@@ -204,7 +227,7 @@ export class PanelManager {
                 let newTransformX = startTransformX;
                 let newTransformY = startTransformY;
 
-                if (resizeDirection.includes('w')) {
+                if (resizeDirection?.includes('w')) {
                     const desiredWidth = startWidth - dx;
                     newWidth = Math.max(280, desiredWidth);
                     if (desiredWidth >= 280) {
@@ -214,17 +237,17 @@ export class PanelManager {
                     }
                 }
 
-                if (resizeDirection.includes('e')) {
+                if (resizeDirection?.includes('e')) {
                     newWidth = Math.max(280, startWidth + dx);
                     newTransformX = startTransformX;
                 }
 
-                if (resizeDirection.includes('s')) {
+                if (resizeDirection?.includes('s')) {
                     newHeight = Math.max(100, startHeight + dy);
                     newTransformY = startTransformY;
                 }
 
-                if (resizeDirection.includes('n')) {
+                if (resizeDirection?.includes('n')) {
                     const desiredHeight = startHeight - dy;
                     newHeight = Math.max(100, desiredHeight);
                     if (desiredHeight >= 100) {
@@ -243,7 +266,7 @@ export class PanelManager {
             });
         };
 
-        const stopResize = () => {
+        const stopResize = (): void => {
             isResizing = false;
             resizeDirection = null;
             panel.style.cursor = 'default';
@@ -261,7 +284,7 @@ export class PanelManager {
     /**
      * Initialize all panels
      */
-    initAllPanels() {
+    initAllPanels(): void {
         this.registerPanel('floating-files-panel');
         this.registerPanel('floating-joints-panel');
         this.registerPanel('floating-model-tree');
@@ -276,7 +299,7 @@ export class PanelManager {
      * Setup maximize buttons (common functionality)
      * Automatically find all buttons with panel-maximize-btn class and bind events
      */
-    setupMaximizeButtons() {
+    setupMaximizeButtons(): void {
         // Find all maximize buttons
         const maximizeButtons = document.querySelectorAll('.panel-maximize-btn');
 
@@ -328,15 +351,13 @@ export class PanelManager {
     /**
      * Save current transform state of model structure graph
      */
-    saveModelGraphTransform() {
+    saveModelGraphTransform(): void {
         try {
-            const svg = document.querySelector('#model-graph-svg');
+            const svg = document.querySelector('#model-graph-svg') as SVGSVGElement | null;
             if (!svg) return;
 
             const d3 = window.d3;
             if (!d3) return;
-
-            const svgSelection = d3.select(svg);
             const currentTransform = d3.zoomTransform(svg);
 
             if (currentTransform) {
@@ -354,9 +375,9 @@ export class PanelManager {
     /**
      * Restore model structure graph to original view
      */
-    restoreModelGraphView() {
+    restoreModelGraphView(): void {
         try {
-            const svg = document.querySelector('#model-graph-svg');
+            const svg = document.querySelector('#model-graph-svg') as SVGSVGElement | null;
             if (!svg) return;
 
             const d3 = window.d3;
@@ -393,4 +414,3 @@ export class PanelManager {
         }
     }
 }
-

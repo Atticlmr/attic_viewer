@@ -1,17 +1,26 @@
 /**
  * USD Viewer Handler - Handles USD viewer container and manager
  */
-export class USDViewerHandler {
-    app: any;
+import type { App } from '../App.js';
+import type { USDViewerManager } from '../../renderer/USDViewerManager.js';
 
-    constructor(app: any) {
+type USDViewerMessageEvent = MessageEvent<{
+    message?: string;
+    error?: string;
+    type?: string;
+}>;
+
+export class USDViewerHandler {
+    app: App;
+
+    constructor(app: App) {
         this.app = app;
     }
 
     /**
      * Create USD viewer container
      */
-    createUSDViewerContainer() {
+    createUSDViewerContainer(): void {
         const canvasContainer = document.getElementById('canvas-container');
         if (!canvasContainer) {
             return;
@@ -35,19 +44,19 @@ export class USDViewerHandler {
     /**
      * Get or create USD viewer manager (lazy loading)
      */
-    async getUSDViewerManager() {
+    async getUSDViewerManager(): Promise<USDViewerManager> {
         if (!this.app.usdViewerManager) {
             const container = document.getElementById('usd-viewer-container');
             if (!container) {
                 throw new Error('USD viewer container not found');
             }
 
-            const USDViewerManager = (await import('../../renderer/USDViewerManager.js')).USDViewerManager;
-            this.app.usdViewerManager = new USDViewerManager(container);
+            const USDViewerManagerModule = (await import('../../renderer/USDViewerManager.js')).USDViewerManager;
+            this.app.usdViewerManager = new USDViewerManagerModule(container);
             this.app.fileHandler.setUSDViewerManager(this.app.usdViewerManager);
 
             // Listen for loading progress
-            this.app.usdViewerManager.on('USD_LOADING_START', (event) => {
+            this.app.usdViewerManager.on('USD_LOADING_START', (event: USDViewerMessageEvent) => {
                 const message = event.data?.message || 'Loading USD...';
                 const statusInfo = document.getElementById('status-info');
                 if (statusInfo) {
@@ -64,7 +73,7 @@ export class USDViewerHandler {
                 }
             });
 
-            this.app.usdViewerManager.on('USD_ERROR', (event) => {
+            this.app.usdViewerManager.on('USD_ERROR', (event: USDViewerMessageEvent) => {
                 const error = event.data?.error || 'Load failed';
                 const statusInfo = document.getElementById('status-info');
                 if (statusInfo) {

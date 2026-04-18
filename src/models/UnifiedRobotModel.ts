@@ -1,5 +1,31 @@
 import * as THREE from 'three';
 
+type UserDataMap = Record<string, unknown>;
+type Vec3 = number[];
+type Vec4 = number[];
+
+export interface GeometrySize {
+    x?: number;
+    y?: number;
+    z?: number;
+    radius?: number;
+    height?: number;
+}
+
+export interface GeometryFromTo {
+    p1: Vec3;
+    p2: Vec3;
+    center: Vec3;
+    height: number;
+    rpy: Vec3;
+}
+
+export interface DiagonalInertia {
+    ixx: number;
+    iyy: number;
+    izz: number;
+}
+
 /**
  * Unified robot model data interface
  * All formats (URDF, MJCF, USD) are converted to this unified format
@@ -12,7 +38,7 @@ export class UnifiedRobotModel {
     constraints: Map<string, Constraint> = new Map();
     rootLink: string | null = null;
     threeObject: THREE.Object3D | null = null;
-    userData: Record<string, any> = {};
+    userData: UserDataMap = {};
 
     addLink(link: Link): void {
         this.links.set(link.name, link);
@@ -48,7 +74,7 @@ export class Link {
     collisions: CollisionGeometry[] = [];
     inertial: InertialProperties | null = null;
     threeObject: THREE.Object3D | null = null;
-    userData: Record<string, any> = {};
+    userData: UserDataMap = {};
 
     constructor(name: string = '') {
         this.name = name;
@@ -59,9 +85,9 @@ export class Link {
  * Origin transformation
  */
 export interface Origin {
-    xyz: number[];
-    rpy: number[];
-    quat?: number[];
+    xyz: Vec3;
+    rpy: Vec3;
+    quat?: Vec4;
 }
 
 /**
@@ -72,8 +98,8 @@ export class VisualGeometry {
     origin: Origin = { xyz: [0, 0, 0], rpy: [0, 0, 0] };
     geometry: GeometryType | null = null;
     material: Material | null = null;
-    threeObject: THREE.Mesh | null = null;
-    userData: Record<string, any> = {};
+    threeObject: THREE.Object3D | null = null;
+    userData: UserDataMap = {};
 }
 
 /**
@@ -83,8 +109,8 @@ export class CollisionGeometry {
     name: string = '';
     origin: Origin = { xyz: [0, 0, 0], rpy: [0, 0, 0] };
     geometry: GeometryType | null = null;
-    threeObject: THREE.Mesh | null = null;
-    userData: Record<string, any> = {};
+    threeObject: THREE.Object3D | null = null;
+    userData: UserDataMap = {};
 }
 
 /**
@@ -92,12 +118,12 @@ export class CollisionGeometry {
  */
 export class GeometryType {
     type: string = '';
-    size: any = null;
+    size: GeometrySize | null = null;
     filename: string | null = null;
-    meshScale: number[] | null = null;
-    fromto: any = null;
-    inlineVertices: boolean | null = null;
-    inlineScale: number[] | null = null;
+    meshScale: Vec3 | null = null;
+    fromto: GeometryFromTo | null = null;
+    inlineVertices: Float32Array | null = null;
+    inlineScale: Vec3 | null = null;
 
     constructor(type: string = '') {
         this.type = type;
@@ -107,10 +133,16 @@ export class GeometryType {
         const cloned = new GeometryType(this.type);
         cloned.size = this.size ? { ...this.size } : null;
         cloned.filename = this.filename;
-        cloned.meshScale = this.meshScale ? [...this.meshScale] : null;
-        cloned.fromto = this.fromto;
+        cloned.meshScale = this.meshScale ? [...this.meshScale] as Vec3 : null;
+        cloned.fromto = this.fromto ? {
+            p1: [...this.fromto.p1] as Vec3,
+            p2: [...this.fromto.p2] as Vec3,
+            center: [...this.fromto.center] as Vec3,
+            height: this.fromto.height,
+            rpy: [...this.fromto.rpy] as Vec3
+        } : null;
         cloned.inlineVertices = this.inlineVertices;
-        cloned.inlineScale = this.inlineScale ? [...this.inlineScale] : null;
+        cloned.inlineScale = this.inlineScale ? [...this.inlineScale] as Vec3 : null;
         return cloned;
     }
 }
@@ -127,7 +159,7 @@ export class InertialProperties {
     ixy: number = 0;
     ixz: number = 0;
     iyz: number = 0;
-    diagonalInertia: any = null;
+    diagonalInertia: DiagonalInertia | null = null;
 }
 
 /**
@@ -139,11 +171,11 @@ export class Joint {
     parent: string | null = null;
     child: string | null = null;
     origin: Origin = { xyz: [0, 0, 0], rpy: [0, 0, 0] };
-    axis: { xyz: number[] } = { xyz: [0, 0, 1] };
+    axis: { xyz: Vec3 } = { xyz: [0, 0, 1] };
     limits: JointLimits | null = null;
     currentValue: number = 0;
     threeObject: THREE.Object3D | null = null;
-    userData: Record<string, any> = {};
+    userData: UserDataMap = {};
 
     constructor(name: string = '', type: string = 'fixed') {
         this.name = name;
@@ -168,8 +200,8 @@ export class Material {
     name: string;
     color: { r: number; g: number; b: number } = { r: 0.8, g: 0.8, b: 0.8 };
     texture: string | null = null;
-    rgba: number[] | null = null;
-    specular: number[] | null = null;
+    rgba: Vec4 | null = null;
+    specular: Vec3 | null = null;
     shininess: number | null = null;
 
     constructor(name: string = '') {
@@ -188,7 +220,7 @@ export class Constraint {
     // Constraint objects (may be body, geom, joint, etc. depending on type)
     body1: string | null = null;
     body2: string | null = null;
-    anchor: number[] | null = null;
+    anchor: Vec3 | null = null;
     torquescale: number | null = null;
 
     // Joint constraint specific properties
@@ -203,7 +235,7 @@ export class Constraint {
     threeObject: THREE.Object3D | null = null;
 
     // Original data (for debugging)
-    userData: Record<string, any> = {};
+    userData: UserDataMap = {};
 
     constructor(name: string = '', type: string = 'connect') {
         this.name = name;

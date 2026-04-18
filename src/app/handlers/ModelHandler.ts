@@ -2,31 +2,33 @@
  * Model Handler - Handles model loading and UI updates
  */
 import * as d3 from 'd3';
+import type { App } from '../App.js';
+import type { ViewerModel } from '../../types/app.js';
 
 export class ModelHandler {
-    app: any;
+    app: App;
 
-    constructor(app: any) {
+    constructor(app: App) {
         this.app = app;
     }
 
     /**
      * Check if file is MJCF format
      */
-    isMJCF(file, model) {
-        const fileExt = file.name.split('.').pop().toLowerCase();
+    isMJCF(file: File, model: ViewerModel): boolean {
+        const fileExt = file.name.split('.').pop()?.toLowerCase();
         return fileExt === 'xml' && model?.userData?.type === 'mjcf';
     }
 
     /**
      * Setup MJCF simulation controls visibility
      */
-    setupMJCFSimulationControls(file, model) {
+    setupMJCFSimulationControls(file: File, model: ViewerModel): void {
         const isMJCF = this.isMJCF(file, model);
 
         const simulationBar = document.getElementById('mujoco-simulation-bar');
-        const resetBtn = document.getElementById('mujoco-reset-btn-bar');
-        const simulateBtn = document.getElementById('mujoco-simulate-btn-bar');
+        const resetBtn = document.getElementById('mujoco-reset-btn-bar') as HTMLButtonElement | null;
+        const simulateBtn = document.getElementById('mujoco-simulate-btn-bar') as HTMLButtonElement | null;
 
         if (isMJCF && model.joints && model.joints.size > 0) {
             this.app.state.currentMJCFFile = file;
@@ -42,7 +44,7 @@ export class ModelHandler {
     /**
      * Show simulation control bar
      */
-    showSimulationBar(simulationBar, resetBtn, simulateBtn) {
+    showSimulationBar(simulationBar: HTMLElement | null, resetBtn: HTMLButtonElement | null, simulateBtn: HTMLButtonElement | null): void {
         if (simulationBar) {
             simulationBar.style.display = 'flex';
         }
@@ -72,7 +74,7 @@ export class ModelHandler {
     /**
      * Hide simulation control bar
      */
-    hideSimulationBar(simulationBar) {
+    hideSimulationBar(simulationBar: HTMLElement | null): void {
         if (simulationBar) {
             simulationBar.style.display = 'none';
         }
@@ -81,7 +83,7 @@ export class ModelHandler {
     /**
      * Handle USD WASM model
      */
-    handleUSDWASMModel(model, file) {
+    handleUSDWASMModel(model: ViewerModel, file: File): boolean {
         const canvas = document.getElementById('canvas');
         const usdContainer = document.getElementById('usd-viewer-container');
 
@@ -107,7 +109,7 @@ export class ModelHandler {
     /**
      * Hide joint controls panel
      */
-    hideJointControls() {
+    hideJointControls(): void {
         const jointPanel = document.getElementById('joint-controls-panel');
         if (jointPanel) {
             jointPanel.style.display = 'none';
@@ -117,7 +119,7 @@ export class ModelHandler {
     /**
      * Hide graph panel
      */
-    hideGraphPanel() {
+    hideGraphPanel(): void {
         const graphPanel = document.getElementById('graph-panel');
         if (graphPanel) {
             graphPanel.style.display = 'none';
@@ -127,7 +129,7 @@ export class ModelHandler {
     /**
      * Restore joint controls and graph display
      */
-    restorePanels() {
+    restorePanels(): void {
         const jointPanel = document.getElementById('joint-controls-panel');
         const graphPanel = document.getElementById('graph-panel');
         if (jointPanel) jointPanel.style.display = '';
@@ -137,7 +139,7 @@ export class ModelHandler {
     /**
      * Setup regular model (non-USD)
      */
-    async setupRegularModel(model, file, isMesh) {
+    async setupRegularModel(model: ViewerModel, file: File, isMesh: boolean): Promise<void> {
         // Clear simulation if any
         if (this.app.mujocoSimulationManager?.hasScene()) {
             this.app.mujocoSimulationManager.clearScene();
@@ -199,7 +201,7 @@ export class ModelHandler {
     /**
      * Show canvas, hide USD viewer
      */
-    showCanvas() {
+    showCanvas(): void {
         const canvas = document.getElementById('canvas');
         const usdContainer = document.getElementById('usd-viewer-container');
         if (canvas && usdContainer) {
@@ -211,7 +213,7 @@ export class ModelHandler {
     /**
      * Hide drop zone
      */
-    hideDropZone() {
+    hideDropZone(): void {
         const dropZone = document.getElementById('drop-zone');
         if (dropZone) {
             dropZone.classList.remove('show');
@@ -222,7 +224,7 @@ export class ModelHandler {
     /**
      * Setup robot model (URDF, Xacro, MJCF)
      */
-    setupRobotModel(model) {
+    setupRobotModel(model: ViewerModel): void {
         this.app.sceneManager.setGroundVisible(true);
         this.app.jointControlsUI.setupJointControls(model);
 
@@ -243,12 +245,12 @@ export class ModelHandler {
     /**
      * Setup mesh model
      */
-    async setupMeshModel(model) {
+    async setupMeshModel(model: ViewerModel): Promise<void> {
         this.app.sceneManager.setGroundVisible(false);
 
         // Clear graph
         if (this.app.modelGraphView) {
-            const svg = d3.select('#model-graph-svg');
+            const svg = d3.select<SVGSVGElement, unknown>('#model-graph-svg');
             svg.selectAll('*:not(defs)').remove();
             const emptyState = document.getElementById('graph-empty-state');
             if (emptyState) {
@@ -284,7 +286,7 @@ export class ModelHandler {
     /**
      * Create loading snapshot
      */
-    async createLoadingSnapshot() {
+    async createLoadingSnapshot(): Promise<HTMLDivElement | null> {
         const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
         if (!canvas) return null;
 
@@ -328,7 +330,7 @@ export class ModelHandler {
     /**
      * Setup snapshot removal with timeout
      */
-    setupSnapshotRemoval(loadingSnapshot) {
+    setupSnapshotRemoval(loadingSnapshot: HTMLDivElement): void {
         let snapshotRemoving = false;
         const removeSnapshot = () => {
             if (loadingSnapshot && loadingSnapshot.parentNode && !snapshotRemoving) {
@@ -365,7 +367,7 @@ export class ModelHandler {
     /**
      * Update file tree
      */
-    updateFileTree(file) {
+    updateFileTree(file: File): void {
         if (this.app.fileTreeView && !this.app.state.isReloading()) {
             this.app.fileTreeView.updateFileTree(
                 this.app.fileHandler.getAvailableModels(),
@@ -379,7 +381,7 @@ export class ModelHandler {
     /**
      * Open code editor
      */
-    openEditor(file) {
+    openEditor(file: File): void {
         const editorPanel = document.getElementById('code-editor-panel');
         if (editorPanel && this.app.codeEditorManager) {
             editorPanel.classList.add('visible');
@@ -394,7 +396,7 @@ export class ModelHandler {
     /**
      * Update model info display
      */
-    updateModelInfo(model, file) {
+    updateModelInfo(model: ViewerModel, file: File): void {
         const statusInfo = document.getElementById('status-info');
         if (!statusInfo || !model) return;
 
@@ -408,8 +410,8 @@ export class ModelHandler {
         }
 
         if (model.joints) {
-            const controllableJoints = Array.from(model.joints.values() as any[])
-                .filter((j: any) => j.type !== 'fixed').length;
+            const controllableJoints = Array.from(model.joints.values())
+                .filter(joint => joint.type !== 'fixed').length;
             info += `Joints: ${model.joints.size} (${controllableJoints} controllable)<br>`;
         }
 
@@ -417,7 +419,7 @@ export class ModelHandler {
         if (model.constraints && model.constraints.size > 0) {
             info += `<span style="color: #00aaff; font-weight: bold;">Constraints: ${model.constraints.size}</span><br>`;
 
-            const constraintTypes = {};
+            const constraintTypes: Record<string, number> = {};
             model.constraints.forEach((constraint) => {
                 constraintTypes[constraint.type] = (constraintTypes[constraint.type] || 0) + 1;
             });
@@ -447,7 +449,7 @@ export class ModelHandler {
     /**
      * Main handler - handle model loaded
      */
-    async handleModelLoaded(model, file, isMesh = false) {
+    async handleModelLoaded(model: ViewerModel, file: File, isMesh = false): Promise<boolean | void> {
         // Clear simulation
         if (this.app.mujocoSimulationManager?.hasScene()) {
             this.app.mujocoSimulationManager.clearScene();

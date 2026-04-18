@@ -3,29 +3,51 @@
  * Responsible for drawing and managing model tree structure graph
  */
 import * as d3 from 'd3';
+import type { SceneManager } from '../renderer/SceneManager.js';
+import type { MeasurementController } from '../controllers/MeasurementController.js';
+import type { CodeEditorManager } from '../controllers/CodeEditorManager.js';
+import type { Constraint, Joint, Link, UnifiedRobotModel } from '../models/UnifiedRobotModel.js';
+
+interface GraphNodeData {
+    name: string;
+    data: Link;
+    children: GraphNodeData[];
+    jointName: string | null;
+    jointType: string | null;
+    isFixedConnection?: boolean;
+}
+
+type GraphHierarchyNode = d3.HierarchyNode<GraphNodeData>;
+type GraphPointNode = d3.HierarchyPointNode<GraphNodeData>;
+type GraphPointLink = d3.HierarchyPointLink<GraphNodeData>;
+type GraphSvgSelection = d3.Selection<SVGSVGElement, unknown, HTMLElement, unknown>;
+type GraphContainerSelection = d3.Selection<SVGGElement, unknown, HTMLElement, unknown>;
+type GraphZoomBehavior = d3.ZoomBehavior<Element, unknown>;
 
 export class ModelGraphView {
-    sceneManager: any;
-    measurementController: any;
-    codeEditorManager: any;
-    currentZoom: any;
-    currentSvg: any;
-    currentContainer: any;
+    sceneManager: SceneManager;
+    measurementController: MeasurementController | null;
+    codeEditorManager: CodeEditorManager | null;
+    currentZoom: GraphZoomBehavior | null;
+    currentSvg: GraphSvgSelection | null;
+    currentContainer: GraphContainerSelection | null;
+    graphClickHandler: ((event: Event) => void) | null;
 
-    constructor(sceneManager: any, measurementController: any = null) {
+    constructor(sceneManager: SceneManager, measurementController: MeasurementController | null = null) {
         this.sceneManager = sceneManager;
         this.measurementController = measurementController;
         this.codeEditorManager = null; // Code editor manager reference
         this.currentZoom = null; // Save current zoom behavior
         this.currentSvg = null; // Save current SVG selector
         this.currentContainer = null; // Save current container
+        this.graphClickHandler = null;
     }
 
     /**
      * Draw model structure graph
      */
-    drawModelGraph(model) {
-        const svg = d3.select('#model-graph-svg');
+    drawModelGraph(model: UnifiedRobotModel | null): void {
+        const svg = d3.select<SVGSVGElement, unknown>('#model-graph-svg');
         const emptyState = document.getElementById('graph-empty-state');
 
         svg.selectAll('*:not(defs)').remove();
@@ -56,7 +78,7 @@ export class ModelGraphView {
             return;
         }
 
-        const hierarchy = d3.hierarchy(treeData);
+        const hierarchy = d3.hierarchy<GraphNodeData>(treeData);
         const nodeCount = hierarchy.descendants().length;
         const treeWidth = Math.max(1000, nodeCount * 70);
         const treeHeight = Math.max(700, hierarchy.height * 120 + 100);
@@ -83,16 +105,16 @@ export class ModelGraphView {
         this.currentContainer = container;
 
         // Record mouse down position to distinguish click from drag
-        let mouseDownPos = null;
+        let mouseDownPos: { x: number; y: number; } | null = null;
         let mouseDownTime = 0;
 
-        svg.on('mousedown', function(event) {
+        svg.on('mousedown', function(event: MouseEvent) {
             mouseDownPos = { x: event.clientX, y: event.clientY };
             mouseDownTime = Date.now();
         });
 
         // Click SVG blank area to clear selection and measurement
-        svg.on('mouseup', (event) => {
+        svg.on('mouseup', (event: MouseEvent) => {
             if (!mouseDownPos) return;
 
             const dx = event.clientX - mouseDownPos.x;
@@ -102,7 +124,7 @@ export class ModelGraphView {
 
             // If movement distance less than 5 pixels and duration less than 300ms, consider it a click
             if (distance < 5 && duration < 300) {
-                const target = event.target;
+                const target = event.target as Element;
                 const tagName = target.tagName.toLowerCase();
 
                 if (tagName === 'svg' || target === svg.node() ||
@@ -123,8 +145,8 @@ export class ModelGraphView {
         });
 
         // Add click handler for container (handle blank area clicks within container)
-        container.on('click', (event) => {
-            const target = event.target;
+        container.on('click', (event: MouseEvent) => {
+            const target = event.target as Element;
             const tagName = target.tagName.toLowerCase();
 
             // Check if clicked area is blank
@@ -156,24 +178,24 @@ export class ModelGraphView {
 
         // Draw connection lines
         const linkGroup = container.append('g').attr('class', 'links');
+        const linkVertical = d3.linkVertical<GraphPointLink, GraphPointNode>()
+            .x(point => point.x + 50)
+            .y(point => point.y + 50);
         linkGroup.selectAll('path')
             .data(hierarchy.links())
             .enter()
             .append('path')
             .attr('class', 'graph-link')
-            .attr('d', d3.linkVertical<any, any>()
-                .x((d: any) => d.x + 50)
-                .y((d: any) => d.y + 50)
-            );
+            .attr('d', linkVertical);
 
         // Draw joint nodes (on connection lines)
         const jointGroup = container.append('g').attr('class', 'joint-nodes');
         const joints = jointGroup.selectAll('g')
-            .data(hierarchy.links().filter((link: any) => link.target.data?.jointName))
+            .data(hierarchy.links().filter((link: GraphPointLink) => Boolean(link.target.data.jointName)))
             .enter()
             .append('g')
             .attr('class', 'graph-joint-group')
-            .attr('transform', d => {
+            .attr('transform', (d: GraphPointLink) => {
                 // Calculate midpoint position of connection line
                 const midX = (d.source.x + d.target.x) / 2 + 50;
                 const midY = (d.source.y + d.target.y) / 2 + 50;
@@ -182,8 +204,8 @@ export class ModelGraphView {
             .style('cursor', 'pointer');
 
         // Add two lines of text: first line is joint name, second line is joint type
-        joints.each(function(d) {
-            const jointGroup = d3.select(this);
+        joints.each(function(d: GraphPointLink) {
+            const jointGroup = d3.select<SVGGElement, GraphPointLink>(this);
 
             // First line: joint name
             const nameText = jointGroup.append('text')
@@ -194,7 +216,7 @@ export class ModelGraphView {
                 .style('font-weight', '500')
                 .style('fill', nodeColors.text)
                 .style('user-select', 'none')
-                .text((d: any) => d.target.data?.jointName);
+                .text(link => link.target.data.jointName);
 
             // Second line: joint type
             const typeText = jointGroup.append('text')
@@ -206,7 +228,7 @@ export class ModelGraphView {
                 .style('fill', nodeColors.text)
                 .style('opacity', 0.7)
                 .style('user-select', 'none')
-                .text((d: any) => d.target.data?.jointType || 'joint');
+                .text(link => link.target.data.jointType || 'joint');
 
             // Calculate maximum width of two lines of text
             const nameBBox = nameText.node().getBBox();
@@ -246,14 +268,13 @@ export class ModelGraphView {
         });
 
         // Joint click event
-        joints.on('click', (event, d) => {
+        joints.on('click', (event: MouseEvent, d: GraphPointLink) => {
             event.stopPropagation();
-            const dAny = d as any;
-
-            if (!dAny.target.data?.jointName) return;
+            const jointName = d.target.data.jointName;
+            if (!jointName) return;
 
             // Get joint object from model
-            const joint = model.joints.get(dAny.target.data?.jointName);
+            const joint = model.joints.get(jointName);
             if (!joint) return;
 
             // Check if Ctrl key is pressed (measurement mode)
@@ -271,11 +292,12 @@ export class ModelGraphView {
                 this.clearAllSelections(svg);
 
                 // Select current joint node
-                d3.select(event.currentTarget).classed('selected', true);
-                d3.select(event.currentTarget).select('.joint-capsule-border')
+                const currentTarget = event.currentTarget as SVGGElement;
+                d3.select(currentTarget).classed('selected', true);
+                d3.select(currentTarget).select('.joint-capsule-border')
                     .style('stroke', isLightTheme ? 'var(--accent)' : '#ff4a4a')
                     .style('stroke-width', '3');
-                d3.select(event.currentTarget).select('.joint-capsule-bg')
+                d3.select(currentTarget).select('.joint-capsule-bg')
                     .style('fill', isLightTheme ? 'rgba(10, 132, 255, 0.15)' : '#3a3a3a');
 
                 if (this.sceneManager) {
@@ -284,8 +306,8 @@ export class ModelGraphView {
                 }
 
                 // Jump to joint definition in code editor
-                if (this.codeEditorManager && (d as any).target.data?.jointName) {
-                    this.codeEditorManager.scrollToJoint((d as any).target.data?.jointName);
+                if (this.codeEditorManager) {
+                    this.codeEditorManager.scrollToJoint(jointName);
                 }
             }
         });
@@ -311,7 +333,7 @@ export class ModelGraphView {
 
         // Add tooltip
         joints.append('title')
-            .text((d: any) => `${d.target.data?.jointName} (${d.target.data?.jointType || 'joint'})`);
+            .text((d: GraphPointLink) => `${d.target.data.jointName} (${d.target.data.jointType || 'joint'})`);
 
         // Draw nodes
         const nodeGroup = container.append('g').attr('class', 'nodes');
@@ -320,7 +342,7 @@ export class ModelGraphView {
             .enter()
             .append('g')
             .attr('class', 'graph-node')
-            .attr('transform', d => `translate(${d.x + 50}, ${d.y + 50})`)
+            .attr('transform', (d: GraphPointNode) => `translate(${d.x + 50}, ${d.y + 50})`)
             .style('cursor', 'pointer');
 
         const textElements = node.append('text')
@@ -330,10 +352,10 @@ export class ModelGraphView {
             .style('font-weight', '500')
             .style('fill', nodeColors.text)
             .style('user-select', 'none')
-            .text(d => d.data.name);
+            .text((d: GraphPointNode) => d.data.name);
 
         node.each(function() {
-            const nodeGroup = d3.select(this);
+            const nodeGroup = d3.select<SVGGElement, GraphPointNode>(this);
             const textElement = nodeGroup.select('text').node() as SVGGraphicsElement | null;
             if (!textElement) return;
             const textBBox = textElement.getBBox();
@@ -365,7 +387,7 @@ export class ModelGraphView {
                 .style('stroke-width', '3');
         });
 
-        node.on('click', (event, d) => {
+        node.on('click', (event: MouseEvent, d: GraphPointNode) => {
             event.stopPropagation();
 
             // Check if Ctrl key is pressed (measurement mode)
@@ -383,11 +405,12 @@ export class ModelGraphView {
                 this.clearAllSelections(svg);
 
                 // Select current node
-                d3.select(event.currentTarget).classed('selected', true);
-                d3.select(event.currentTarget).select('.node-border')
+                const currentTarget = event.currentTarget as SVGGElement;
+                d3.select(currentTarget).classed('selected', true);
+                d3.select(currentTarget).select('.node-border')
                     .style('stroke', isLightTheme ? 'var(--accent)' : '#4a9eff')
                     .style('stroke-width', '6');
-                d3.select(event.currentTarget).select('.node-bg')
+                d3.select(currentTarget).select('.node-bg')
                     .style('fill', isLightTheme ? 'rgba(10, 132, 255, 0.15)' : '#3a3a3a');
 
                 if (d.data.data && this.sceneManager) {
@@ -403,7 +426,7 @@ export class ModelGraphView {
         });
 
         // Right-click: toggle link visibility
-        node.on('contextmenu', (event, d) => {
+        node.on('contextmenu', (event: MouseEvent, d: GraphPointNode) => {
             event.preventDefault();
             event.stopPropagation();
 
@@ -412,7 +435,7 @@ export class ModelGraphView {
             const linkName = d.data.name;
             const isVisible = this.sceneManager.visualizationManager.toggleLinkVisibility(linkName, this.sceneManager.currentModel);
 
-            const nodeElement = d3.select(event.currentTarget);
+            const nodeElement = d3.select(event.currentTarget as SVGGElement);
             if (!isVisible) {
                 nodeElement.classed('hidden', true);
                 nodeElement.select('.node-bg')
@@ -485,7 +508,7 @@ export class ModelGraphView {
             .text('Ground');
 
         // Ground node click event
-        groundNode.on('click', (event) => {
+        groundNode.on('click', (event: MouseEvent) => {
             event.stopPropagation();
 
             // Check if Ctrl key is pressed
@@ -504,11 +527,12 @@ export class ModelGraphView {
                 this.clearAllSelections(svg);
 
                 // Select ground node
-                d3.select(event.currentTarget).classed('selected', true);
-                d3.select(event.currentTarget).select('.node-border')
+                const currentTarget = event.currentTarget as SVGGElement;
+                d3.select(currentTarget).classed('selected', true);
+                d3.select(currentTarget).select('.node-border')
                     .style('stroke', '#4a9eff')
                     .style('stroke-width', '6');
-                d3.select(event.currentTarget).select('.node-bg')
+                d3.select(currentTarget).select('.node-bg')
                     .style('fill', '#3a3a3a');
             }
         });
@@ -517,7 +541,7 @@ export class ModelGraphView {
         if (model.constraints && model.constraints.size > 0) {
             const constraintGroup = container.append('g').attr('class', 'constraints');
 
-            model.constraints.forEach((constraint, name) => {
+            model.constraints.forEach((constraint: Constraint) => {
                 if (constraint.type === 'connect' || constraint.type === 'weld') {
                     // Find positions of two bodies in tree
                     const body1Node = hierarchy.descendants().find(d => d.data.name === constraint.body1);
@@ -586,38 +610,42 @@ export class ModelGraphView {
     /**
      * Build hierarchy data
      */
-    buildHierarchy(linkName, model) {
+    buildHierarchy(linkName: string | null, model: UnifiedRobotModel): GraphNodeData | null {
+        if (!linkName) return null;
+
         const link = model.links.get(linkName);
         if (!link) return null;
 
-        const node = {
+        const node: GraphNodeData = {
             name: linkName,
             data: link,
-            children: []
+            children: [],
+            jointName: null,
+            jointType: null
         };
 
         // 1. Find child nodes through joints
-        model.joints.forEach((joint, jointName) => {
+        model.joints.forEach((joint: Joint, jointName: string) => {
             if (joint.parent === linkName && joint.child) {
                 const childNode = this.buildHierarchy(joint.child, model);
                 if (childNode) {
-                    (childNode as any).jointName = jointName;
-                    (childNode as any).jointType = joint.type;
+                    childNode.jointName = jointName;
+                    childNode.jointType = joint.type;
                     node.children.push(childNode);
                 }
             }
         });
 
         // 2. Find fixed-connected child bodies (child bodies without joints)
-        model.links.forEach((childLink, childName) => {
+        model.links.forEach((childLink: Link, childName: string) => {
             // Check if already added through joint
             const alreadyAdded = node.children.some(child => child.name === childName);
             if (!alreadyAdded && childLink.userData.parentName === linkName) {
                 const childNode = this.buildHierarchy(childName, model);
                 if (childNode) {
-                    (childNode as any).jointName = null; // Fixed connection, no joint
-                    (childNode as any).jointType = 'fixed';
-                    (childNode as any).isFixedConnection = true; // Mark as fixed connection
+                    childNode.jointName = null; // Fixed connection, no joint
+                    childNode.jointType = 'fixed';
+                    childNode.isFixedConnection = true; // Mark as fixed connection
                     node.children.push(childNode);
                 }
             }
@@ -629,13 +657,13 @@ export class ModelGraphView {
     /**
      * Setup document-level click handler (for clicks outside panel)
      */
-    setupDocumentClickHandler() {
+    setupDocumentClickHandler(): void {
         // Remove previously existing listener first to avoid duplicate binding
-        if ((window as any).graphClickHandler) {
-            document.removeEventListener('click', (window as any).graphClickHandler, true);
+        if (this.graphClickHandler) {
+            document.removeEventListener('click', this.graphClickHandler, true);
         }
 
-        (window as any).graphClickHandler = (event: Event) => {
+        this.graphClickHandler = (event: Event) => {
             // Check if clicked element is within model structure graph
             const floatingPanel = document.getElementById('floating-model-tree');
             if (!floatingPanel || floatingPanel.style.display === 'none') {
@@ -659,7 +687,7 @@ export class ModelGraphView {
 
             // If not clicking node or joint, clear selection and measurement
             if (!isNode && !isJoint && !isHeader) {
-                const svg = d3.select('#model-graph-svg');
+                const svg = d3.select<SVGSVGElement, unknown>('#model-graph-svg');
 
                 // Clear all selection states (including style reset)
                 this.clearAllSelections(svg);
@@ -678,13 +706,13 @@ export class ModelGraphView {
         };
 
         // Use capture phase to ensure event is captured
-        document.addEventListener('click', (window as any).graphClickHandler, true);
+        document.addEventListener('click', this.graphClickHandler, true);
     }
 
     /**
      * Clear all selection states (unified handling, ensure styles are correctly reset)
      */
-    clearAllSelections(svg) {
+    clearAllSelections(svg: GraphSvgSelection): void {
         // Get current theme
         const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
         const isLightTheme = currentTheme === 'light';
@@ -712,14 +740,14 @@ export class ModelGraphView {
     /**
      * Set measurement controller
      */
-    setMeasurementController(controller) {
+    setMeasurementController(controller: MeasurementController): void {
         this.measurementController = controller;
     }
 
     /**
      * Set code editor manager
      */
-    setCodeEditorManager(manager) {
+    setCodeEditorManager(manager: CodeEditorManager): void {
         this.codeEditorManager = manager;
     }
 
@@ -728,7 +756,7 @@ export class ModelGraphView {
      * @param {boolean} animated - Whether to use animation
      * @param {number} duration - Animation duration (milliseconds)
      */
-    fitToView(animated = false, duration = 0) {
+    fitToView(animated = false, duration = 0): void {
         if (!this.currentSvg || !this.currentContainer || !this.currentZoom) {
             return;
         }
@@ -780,4 +808,3 @@ export class ModelGraphView {
         }
     }
 }
-

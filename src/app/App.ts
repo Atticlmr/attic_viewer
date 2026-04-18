@@ -2,7 +2,6 @@
  * Application main class
  * Refactored from main.js with separated handlers
  */
-import * as THREE from 'three';
 import * as d3 from 'd3';
 import { SceneManager } from '../renderer/SceneManager.js';
 import { UIController } from '../ui/UIController.js';
@@ -25,6 +24,10 @@ import { SimulationHandler } from './handlers/SimulationHandler.js';
 import { CanvasHandler } from './handlers/CanvasHandler.js';
 import { ModelTreeHandler } from './handlers/ModelTreeHandler.js';
 import { USDViewerHandler } from './handlers/USDViewerHandler.js';
+import type { AppFileType, LoadableFileInfo, ViewerModel, VSCodeFileInfo } from '../types/app.js';
+
+type AngleUnit = 'rad' | 'deg';
+type SupportedLanguage = 'zh-CN' | 'en-US';
 
 // Expose d3 globally for PanelManager
 window.d3 = d3;
@@ -37,33 +40,33 @@ window.i18n = i18n;
  */
 export class App {
     // State
-    state: any;
+    state: AppState;
 
     // Managers
-    sceneManager: any;
-    uiController: any;
-    fileHandler: any;
-    jointControlsUI: any;
-    panelManager: any;
-    modelGraphView: any;
-    fileTreeView: any;
-    codeEditorManager: any;
-    measurementController: any;
-    modelConversionController: any;
-    usdViewerManager: any;
-    mujocoSimulationManager: any;
+    sceneManager: SceneManager | null;
+    uiController: UIController | null;
+    fileHandler: FileHandlerController | null;
+    jointControlsUI: JointControlsUI | null;
+    panelManager: PanelManager | null;
+    modelGraphView: ModelGraphView | null;
+    fileTreeView: FileTreeView | null;
+    codeEditorManager: CodeEditorManager | null;
+    measurementController: MeasurementController | null;
+    modelConversionController: ModelConversionController | null;
+    usdViewerManager: USDViewerManager | null;
+    mujocoSimulationManager: MujocoSimulationManager | null;
 
     // Handlers
-    modelHandler: any;
-    fileHandlerModule: any;
-    themeHandler: any;
-    simulationHandler: any;
-    canvasHandler: any;
-    modelTreeHandler: any;
-    usdViewerHandler: any;
+    modelHandler: ModelHandler | null;
+    fileHandlerModule: FileHandler | null;
+    themeHandler: ThemeHandler | null;
+    simulationHandler: SimulationHandler | null;
+    canvasHandler: CanvasHandler | null;
+    modelTreeHandler: ModelTreeHandler | null;
+    usdViewerHandler: USDViewerHandler | null;
 
     // VSCode file map
-    vscodeFileMap: any;
+    vscodeFileMap: Map<string, VSCodeFileInfo>;
 
     constructor() {
         // State
@@ -100,7 +103,7 @@ export class App {
      * Load model from VSCode extension
      * @param {Object} fileInfo - File info from VSCode {name, path, content, directory}
      */
-    async loadModelFromVSCode(fileInfo) {
+    async loadModelFromVSCode(fileInfo: VSCodeFileInfo): Promise<void> {
         if (this.fileHandlerModule) {
             await this.fileHandlerModule.handleVSCodeFile(fileInfo);
         }
@@ -109,8 +112,9 @@ export class App {
     /**
      * Detect file type from filename
      */
-    detectFileType(filename) {
-        const ext = filename.split('.').pop().toLowerCase();
+    detectFileType(filename: string): AppFileType {
+        const ext = filename.split('.').pop()?.toLowerCase();
+        if (!ext) return 'unknown';
         if (['urdf', 'xacro'].includes(ext)) return 'urdf';
         if (['mjcf', 'xml'].includes(ext)) return 'mjcf';
         if (['usd', 'usda', 'usdc', 'usdz'].includes(ext)) return 'usd';
@@ -121,13 +125,13 @@ export class App {
     /**
      * Initialize application
      */
-    async init() {
+    async init(): Promise<void> {
         try {
             // Initialize internationalization
             i18n.init();
 
             // Initialize scene manager
-            const canvas = document.getElementById('canvas');
+            const canvas = document.getElementById('canvas') as HTMLCanvasElement | null;
             if (!canvas) {
                 console.error('Canvas element not found');
                 return;
@@ -149,14 +153,14 @@ export class App {
                 return await this.usdViewerHandler.getUSDViewerManager();
             });
 
-            this.fileHandler.onFilesLoaded = (files) => {
+            this.fileHandler.onFilesLoaded = (files: LoadableFileInfo[]) => {
                 if (this.fileTreeView) {
                     this.fileTreeView.updateFileTree(files, this.fileHandler.getFileMap());
                 }
             };
 
-            this.fileHandler.onModelLoaded = (model, file, isMesh = false, snapshot = null) => {
-                this.handleModelLoaded(model, file, isMesh, snapshot);
+            this.fileHandler.onModelLoaded = (model: ViewerModel, file: File, isMesh = false, snapshot = null) => {
+                void this.handleModelLoaded(model, file, isMesh, snapshot);
             };
 
             // Initialize joint controls UI
@@ -167,10 +171,10 @@ export class App {
 
             // Initialize file tree view
             this.fileTreeView = new FileTreeView();
-            this.fileTreeView.onFileClick = (fileInfo) => {
+            this.fileTreeView.onFileClick = (fileInfo: LoadableFileInfo) => {
                 this.handleFileClick(fileInfo);
             };
-            this.fileTreeView.onFilesSelected = async (files) => {
+            this.fileTreeView.onFilesSelected = async (files: File[]) => {
                 // Handle selected files directly using fileHandler
                 // This preserves webkitRelativePath information
                 this.fileHandler.fileMap.clear();
@@ -181,7 +185,7 @@ export class App {
                         this.fileHandler.fileMap.set(file.name, file);
                     }
                 }
-                const loadableFiles = await this.fileHandler.findAllLoadableFiles(Array.from(files));
+                const loadableFiles = await this.fileHandler.findAllLoadableFiles(files);
                 if (loadableFiles.length > 0) {
                     this.fileHandler.availableModels = loadableFiles;
                     this.fileHandler.onFilesLoaded?.(loadableFiles);
@@ -240,7 +244,7 @@ export class App {
                 this.modelGraphView.setCodeEditorManager(this.codeEditorManager);
             }
 
-            this.codeEditorManager.onReload = async (file, skipTreeUpdate = false) => {
+            this.codeEditorManager.onReload = async (file: File, skipTreeUpdate = false) => {
                 if (skipTreeUpdate) {
                     this.state.setReloading(true);
                 }
@@ -252,15 +256,15 @@ export class App {
             };
 
             // Save as callback
-            this.codeEditorManager.onSaveAs = (newFile) => {
+            this.codeEditorManager.onSaveAs = (newFile: File) => {
                 const newFileInfo = {
                     file: newFile,
                     name: newFile.name,
                     type: this.detectFileType(newFile.name),
                     path: newFile.name,
                     category: 'model',
-                    ext: newFile.name.split('.').pop().toLowerCase()
-                };
+                    ext: newFile.name.split('.').pop()?.toLowerCase() || ''
+                } satisfies LoadableFileInfo;
 
                 const models = this.fileHandler.getAvailableModels();
                 if (!models.find(m => m.name === newFile.name)) {
@@ -315,18 +319,18 @@ export class App {
     /**
      * Handle model loaded
      */
-    async handleModelLoaded(model, file, isMesh = false, snapshot = null) {
+    async handleModelLoaded(model: ViewerModel, file: File, isMesh = false, snapshot: HTMLElement | null = null): Promise<void> {
         // Setup MJCF simulation controls
-        this.modelHandler.setupMJCFSimulationControls(file, model);
+        this.modelHandler?.setupMJCFSimulationControls(file, model);
 
         // Handle the model
-        await this.modelHandler.handleModelLoaded(model, file, isMesh);
+        await this.modelHandler?.handleModelLoaded(model, file, isMesh);
     }
 
     /**
      * Handle file click
      */
-    handleFileClick(fileInfo) {
+    handleFileClick(fileInfo: LoadableFileInfo): void {
         if (this.fileHandlerModule) {
             this.fileHandlerModule.handleFileClick(fileInfo);
         }
@@ -335,14 +339,14 @@ export class App {
     /**
      * Handle theme change
      */
-    handleThemeChanged(theme) {
-        this.themeHandler.handleThemeChanged(theme);
+    handleThemeChanged(theme: string): void {
+        this.themeHandler?.handleThemeChanged(theme);
     }
 
     /**
      * Handle angle unit change
      */
-    handleAngleUnitChanged(unit) {
+    handleAngleUnitChanged(unit: AngleUnit): void {
         this.state.setAngleUnit(unit);
         if (this.jointControlsUI) {
             this.jointControlsUI.setAngleUnit(unit);
@@ -352,7 +356,7 @@ export class App {
     /**
      * Handle reset joints button
      */
-    handleResetJoints() {
+    handleResetJoints(): void {
         if (this.state.currentModel && this.jointControlsUI) {
             this.jointControlsUI.resetAllJoints(this.state.currentModel);
         }
@@ -361,7 +365,7 @@ export class App {
     /**
      * Handle ignore limits toggle
      */
-    handleIgnoreLimitsChanged(ignore) {
+    handleIgnoreLimitsChanged(ignore: boolean): void {
         if (this.jointControlsUI && this.state.currentModel) {
             this.jointControlsUI.updateAllSliderLimits(this.state.currentModel, ignore);
         }
@@ -370,7 +374,7 @@ export class App {
     /**
      * Handle language change
      */
-    handleLanguageChanged(lang) {
+    handleLanguageChanged(lang: SupportedLanguage): void {
         i18n.setLanguage(lang);
 
         if (this.codeEditorManager) {
@@ -408,7 +412,7 @@ export class App {
     /**
      * Set axes button state
      */
-    setAxesButtonState(show) {
+    setAxesButtonState(show: boolean): void {
         const axesBtn = document.getElementById('toggle-axes-btn');
         if (!axesBtn) return;
 
@@ -429,7 +433,7 @@ export class App {
     /**
      * Update editor button visibility
      */
-    updateEditorButtonVisibility() {
+    updateEditorButtonVisibility(): void {
         const openEditorBtn = document.getElementById('open-editor-btn');
         if (openEditorBtn) {
             openEditorBtn.classList.add('visible');
@@ -439,21 +443,21 @@ export class App {
     /**
      * Handle MuJoCo reset
      */
-    handleMujocoReset() {
-        this.simulationHandler.handleMujocoReset();
+    handleMujocoReset(): void {
+        this.simulationHandler?.handleMujocoReset();
     }
 
     /**
      * Handle MuJoCo simulation toggle
      */
-    async handleMujocoToggleSimulate() {
-        return await this.simulationHandler.handleMujocoToggleSimulate();
+    async handleMujocoToggleSimulate(): Promise<boolean | undefined> {
+        return await this.simulationHandler?.handleMujocoToggleSimulate();
     }
 
     /**
      * Animation loop
      */
-    animate() {
+    animate(): void {
         requestAnimationFrame(() => this.animate());
         if (this.sceneManager) {
             this.sceneManager.update();

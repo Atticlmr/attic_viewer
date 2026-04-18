@@ -1,17 +1,19 @@
 import * as THREE from 'three';
 import { MathUtils } from '../utils/MathUtils.js';
+import type { SceneManager } from './SceneManager.js';
+import type { InertialProperties, Link, UnifiedRobotModel } from '../models/UnifiedRobotModel.js';
 
 /**
  * InertialVisualization - Handles center of mass and inertia visualization
  */
 export class InertialVisualization {
-    sceneManager: any;
-    comMarkers: any[];
-    inertiaEllipsoids: any[];
+    sceneManager: SceneManager;
+    comMarkers: THREE.Object3D[];
+    inertiaEllipsoids: THREE.Object3D[];
     showCOM: boolean;
     showInertia: boolean;
 
-    constructor(sceneManager: any) {
+    constructor(sceneManager: SceneManager) {
         this.sceneManager = sceneManager;
         this.comMarkers = [];
         this.inertiaEllipsoids = [];
@@ -24,7 +26,7 @@ export class InertialVisualization {
      * @param {number} radius - Radius of COM marker
      * @returns {THREE.Group} COM marker group
      */
-    static createCOMGeometry(radius) {
+    static createCOMGeometry(radius: number): THREE.Group {
         const comGroup = new THREE.Group();
         const segments = 16;
 
@@ -72,7 +74,7 @@ export class InertialVisualization {
     /**
      * Extract and visualize inertial properties from model
      */
-    extractInertialProperties(model) {
+    extractInertialProperties(model: UnifiedRobotModel): void {
         // Clean up: remove from parent objects
         this.comMarkers.forEach(marker => {
             if (marker.parent) {
@@ -91,13 +93,13 @@ export class InertialVisualization {
             return;
         }
 
-        model.links.forEach((link, name) => {
+        model.links.forEach((link: Link, name: string) => {
             if (!link.inertial) return;
 
             const inertial = link.inertial;
 
             // Try to get COM position, handling various data formats
-            let comPosition;
+            let comPosition: THREE.Vector3;
             try {
                 if (inertial.origin && inertial.origin.xyz) {
                     comPosition = MathUtils.xyzToVector3(inertial.origin.xyz);
@@ -122,7 +124,7 @@ export class InertialVisualization {
             }
 
             // Create inertia ellipsoid (only when display is needed)
-            if (this.showInertia && (inertial.ixx !== undefined || inertial.inertia)) {
+            if (this.showInertia && inertial.ixx !== undefined) {
                 this.createInertiaEllipsoid(model, link, comPosition, inertial);
             }
         });
@@ -131,7 +133,7 @@ export class InertialVisualization {
     /**
      * Create Blender-style quarter black-and-white sphere COM marker
      */
-    createCOMMarker(model, link, position) {
+    createCOMMarker(model: UnifiedRobotModel, link: Link, position: THREE.Vector3): void {
         const linkObject = this.findLinkObject(model.threeObject, link.name);
         if (!linkObject) {
             return;
@@ -243,7 +245,7 @@ export class InertialVisualization {
     /**
      * Create inertia box visualization (Gazebo style)
      */
-    createInertiaEllipsoid(model, link, comPosition, inertial) {
+    createInertiaEllipsoid(model: UnifiedRobotModel, link: Link, comPosition: THREE.Vector3, inertial: InertialProperties): void {
         // For MJCF models with quat, use the original diagonal inertia values
         // (before rotation), then apply the quat rotation to the visualization
         let inertiaForCalculation;
@@ -305,7 +307,7 @@ export class InertialVisualization {
             //
             // For the visual ellipsoid, try applying coord conversion first:
             const quat = inertial.origin.quat;
-            const mjcfQuat = new THREE.Quaternion(quat.x, quat.y, quat.z, quat.w);
+            const mjcfQuat = new THREE.Quaternion(quat[0] || 0, quat[1] || 0, quat[2] || 0, quat[3] ?? 1);
 
             // Apply coordinate system transformation: 180° around Y axis
             // This matches the two 90° Y-rotations in MJCFAdapter.parseInertial
@@ -349,8 +351,12 @@ export class InertialVisualization {
     /**
      * Find link object in scene graph
      */
-    findLinkObject(root, linkName) {
-        let found = null;
+    findLinkObject(root: THREE.Object3D | null, linkName: string): THREE.Object3D | null {
+        if (!root) {
+            return null;
+        }
+
+        let found: THREE.Object3D | null = null;
         root.traverse((child) => {
             if (child.name === linkName || child.name === `link_${linkName}` || child.name === `body_${linkName}`) {
                 found = child;
@@ -362,7 +368,7 @@ export class InertialVisualization {
     /**
      * Toggle COM display
      */
-    toggleCenterOfMass(show, currentModel) {
+    toggleCenterOfMass(show: boolean, currentModel: UnifiedRobotModel | null): void {
         this.showCOM = show;
 
         if (show && this.comMarkers.length === 0 && currentModel) {
@@ -379,7 +385,7 @@ export class InertialVisualization {
     /**
      * Toggle inertia display
      */
-    toggleInertia(show, currentModel) {
+    toggleInertia(show: boolean, currentModel: UnifiedRobotModel | null): void {
         this.showInertia = show;
 
         if (show && this.inertiaEllipsoids.length === 0 && currentModel) {
@@ -396,7 +402,7 @@ export class InertialVisualization {
     /**
      * Clear all inertial visualizations
      */
-    clear() {
+    clear(): void {
         this.comMarkers.forEach(marker => {
             if (marker.parent) marker.parent.remove(marker);
         });
@@ -407,4 +413,3 @@ export class InertialVisualization {
         this.inertiaEllipsoids = [];
     }
 }
-

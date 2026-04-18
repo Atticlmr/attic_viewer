@@ -5,12 +5,23 @@
 import { CodeEditor } from '../editor/CodeEditor.js';
 import { readFileContent } from '../utils/FileUtils.js';
 
+type SupportedEditorFileType = 'urdf' | 'xacro' | 'mjcf' | 'usd';
+type EditorInlineMessageLevel = 'success' | 'error' | 'warning' | 'info';
+
+interface EditorState {
+    currentFile: File | null;
+    currentContent: string;
+    originalContent: string;
+    defaultFileName: string;
+    defaultFileType: SupportedEditorFileType;
+}
+
 export class CodeEditorManager {
-    codeEditorInstance: any;
-    editorState: any;
-    onReload: any;
-    onSaveAs: any;
-    fileMap: any;
+    codeEditorInstance: CodeEditor | null;
+    editorState: EditorState;
+    onReload: ((file: File, isReload: boolean) => Promise<void> | void) | null;
+    onSaveAs: ((file: File) => Promise<void> | void) | null;
+    fileMap: Map<string, File> | null;
     _reloadingInProgress: boolean;
     updateControlsVisibility: (() => void) | undefined;
 
@@ -24,13 +35,15 @@ export class CodeEditorManager {
             defaultFileType: 'urdf' // urdf, mjcf, usd
         };
         this.onReload = null; // Reload callback
+        this.onSaveAs = null;
         this.fileMap = null; // File map reference
+        this._reloadingInProgress = false;
     }
 
     /**
      * Initialize editor
      */
-    init(fileMap) {
+    init(fileMap: Map<string, File>): void {
         this.fileMap = fileMap;
 
         const editorWrapper = document.getElementById('code-editor-wrapper');
@@ -41,7 +54,7 @@ export class CodeEditorManager {
         this.codeEditorInstance = new CodeEditor(editorWrapper);
 
         // Listen for content changes
-        this.codeEditorInstance.onChange((content) => {
+        this.codeEditorInstance.onChange((content: string) => {
             this.editorState.currentContent = content;
             this.updateEditorSaveStatus();
         });
@@ -58,7 +71,7 @@ export class CodeEditorManager {
     /**
      * Setup filename input
      */
-    setupFileControls() {
+    setupFileControls(): void {
         const filenameInput = document.getElementById('editor-filename-input') as HTMLInputElement | null;
         const filenameDisplay = document.getElementById('editor-filename') as HTMLElement | null;
 
@@ -94,11 +107,11 @@ export class CodeEditorManager {
     /**
      * Infer file type from filename extension
      */
-    detectFileTypeFromName(fileName) {
+    detectFileTypeFromName(fileName: string): SupportedEditorFileType {
         const ext = fileName.toLowerCase().split('.').pop();
 
         // Supported extension mapping
-        const extensionMap = {
+        const extensionMap: Record<string, SupportedEditorFileType> = {
             'xml': 'urdf',  // Default XML files treated as URDF (may also be MJCF, but loader will auto-detect)
             'urdf': 'urdf',
             'xacro': 'xacro',
@@ -109,13 +122,13 @@ export class CodeEditorManager {
             'usdz': 'usd'
         };
 
-        return extensionMap[ext] || 'urdf';
+        return extensionMap[ext as keyof typeof extensionMap] || 'urdf';
     }
 
     /**
      * Setup editor control buttons
      */
-    setupEditorControls() {
+    setupEditorControls(): void {
         const openEditorBtn = document.getElementById('open-editor-btn');
         const editorPanel = document.getElementById('code-editor-panel');
         const closeEditorBtn = document.getElementById('close-editor-btn');
@@ -171,7 +184,8 @@ export class CodeEditorManager {
                     }
 
                     // Determine filename and type
-                    let fileName, fileType;
+                    let fileName: string;
+                    let fileType: string;
                     if (this.editorState.currentFile) {
                         // If file is open, use its filename
                         fileName = this.editorState.currentFile.name;
@@ -199,7 +213,7 @@ export class CodeEditorManager {
                     // If has current file, update file map (temporary)
                     if (this.editorState.currentFile) {
                         // Collect keys to update
-                        const keysToUpdate = [];
+                        const keysToUpdate: string[] = [];
                         for (const [key] of this.fileMap.entries()) {
                             if (key.endsWith(fileName) || key === fileName) {
                                 keysToUpdate.push(key);
@@ -250,7 +264,8 @@ export class CodeEditorManager {
 
                 } catch (error) {
                     this._reloadingInProgress = false;
-                    console.error(`${window.i18n.t('reloadFailed')}: ${error.message}`);
+                    const message = error instanceof Error ? error.message : String(error);
+                    console.error(`${window.i18n.t('reloadFailed')}: ${message}`);
                 }
             });
         }
@@ -273,7 +288,7 @@ export class CodeEditorManager {
     /**
      * Load file into editor
      */
-    async loadFile(file, skipIfReloading = true) {
+    async loadFile(file: File, skipIfReloading = true): Promise<void> {
         if (!file || !this.codeEditorInstance) return;
 
         // If reloading in progress, skip (avoid overwriting editor content)
@@ -312,14 +327,15 @@ export class CodeEditorManager {
             }, 100);
 
         } catch (error) {
-            console.error(`${window.i18n.t('loadFailed')}: ${error.message}`);
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`${window.i18n.t('loadFailed')}: ${message}`);
         }
     }
 
     /**
      * Update editor save status
      */
-    updateEditorSaveStatus() {
+    updateEditorSaveStatus(): void {
         const saveStatus = document.getElementById('editor-save-status');
         if (!saveStatus || !this.codeEditorInstance) return;
 
@@ -344,7 +360,7 @@ export class CodeEditorManager {
     /**
      * Update theme
      */
-    updateTheme(theme) {
+    updateTheme(theme: string): void {
         if (this.codeEditorInstance) {
             this.codeEditorInstance.updateTheme(theme);
         }
@@ -353,8 +369,12 @@ export class CodeEditorManager {
     /**
      * Perform download operation
      */
-    async performSave() {
+    async performSave(): Promise<void> {
         try {
+            if (!this.codeEditorInstance || !this.editorState.currentFile || !this.fileMap) {
+                return;
+            }
+
             const newContent = this.codeEditorInstance.getValue();
             const fileName = this.editorState.currentFile.name;
 
@@ -385,14 +405,15 @@ export class CodeEditorManager {
 
         } catch (error) {
             console.error('Download failed:', error);
-            this.showInlineMessage(`Download failed: ${error.message}`, 'error');
+            const message = error instanceof Error ? error.message : String(error);
+            this.showInlineMessage(`Download failed: ${message}`, 'error');
         }
     }
 
     /**
      * Download file to local
      */
-    downloadFile(content, fileName) {
+    downloadFile(content: string, fileName: string): void {
         try {
             const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
@@ -413,7 +434,7 @@ export class CodeEditorManager {
     /**
      * Show inline message in editor
      */
-    showInlineMessage(message, type = 'info') {
+    showInlineMessage(message: string, type: EditorInlineMessageLevel = 'info'): void {
         const editorPanel = document.getElementById('code-editor-panel');
         if (!editorPanel) {
             return;
@@ -423,7 +444,7 @@ export class CodeEditorManager {
         const oldMsg = editorPanel.querySelector('.editor-inline-message');
         if (oldMsg) oldMsg.remove();
 
-        const colors = {
+        const colors: Record<EditorInlineMessageLevel, string> = {
             success: '#4ade80',
             error: '#ff6b6b',
             warning: '#fbbf24',
@@ -460,7 +481,7 @@ export class CodeEditorManager {
     /**
      * Clear editor content
      */
-    clearEditor() {
+    clearEditor(): void {
         if (!this.codeEditorInstance) return;
 
         // Clear editor content
@@ -489,7 +510,7 @@ export class CodeEditorManager {
     /**
      * Get editor instance
      */
-    getEditor() {
+    getEditor(): CodeEditor | null {
         return this.codeEditorInstance;
     }
 
@@ -497,7 +518,7 @@ export class CodeEditorManager {
      * Scroll to link definition in code
      * @param {string} linkName - Link name
      */
-    scrollToLink(linkName) {
+    scrollToLink(linkName: string): boolean {
         if (!this.codeEditorInstance || !linkName) {
             return false;
         }
@@ -534,7 +555,7 @@ export class CodeEditorManager {
      * Scroll to joint definition in code
      * @param {string} jointName - Joint name
      */
-    scrollToJoint(jointName) {
+    scrollToJoint(jointName: string): boolean {
         if (!this.codeEditorInstance || !jointName) {
             return false;
         }
@@ -559,4 +580,3 @@ export class CodeEditorManager {
         return found;
     }
 }
-

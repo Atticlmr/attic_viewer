@@ -2,19 +2,18 @@
  * CodeMirror 6 code editor wrapper
  */
 import { EditorView, basicSetup } from 'codemirror';
-import { EditorState } from '@codemirror/state';
+import { EditorState, type Extension } from '@codemirror/state';
 import { xml } from '@codemirror/lang-xml';
 import { vscodeDark } from '@uiw/codemirror-theme-vscode';
-import { githubLight, githubDark } from '@uiw/codemirror-theme-github';
-import { dracula } from '@uiw/codemirror-theme-dracula';
+import { githubLight } from '@uiw/codemirror-theme-github';
 
 export class CodeEditor {
-    parentElement: any;
-    view: any;
-    onChangeCallback: any;
+    parentElement: HTMLElement;
+    view: EditorView | null;
+    onChangeCallback: ((content: string) => void) | null;
     currentTheme: string;
 
-    constructor(parentElement: any, theme: string = 'vscode-dark') {
+    constructor(parentElement: HTMLElement, theme: string = 'vscode-dark') {
         this.parentElement = parentElement;
         this.view = null;
         this.onChangeCallback = null;
@@ -26,7 +25,7 @@ export class CodeEditor {
     /**
      * Get theme configuration
      */
-    getThemeExtension() {
+    getThemeExtension(): Extension {
         // Auto-select based on page theme
         const pageTheme = document.documentElement.getAttribute('data-theme') || 'dark';
 
@@ -38,7 +37,7 @@ export class CodeEditor {
         }
     }
 
-    setupEditor() {
+    setupEditor(): void {
         // Clear container
         this.parentElement.innerHTML = '';
 
@@ -114,7 +113,7 @@ export class CodeEditor {
      * Set editor content
      * @param {string} content - Content
      */
-    setValue(content) {
+    setValue(content: string): void {
         if (!this.view) return;
 
         const transaction = this.view.state.update({
@@ -132,7 +131,7 @@ export class CodeEditor {
      * Get editor content
      * @returns {string}
      */
-    getValue() {
+    getValue(): string {
         if (!this.view) return '';
         return this.view.state.doc.toString();
     }
@@ -141,14 +140,14 @@ export class CodeEditor {
      * Set content change callback
      * @param {Function} callback - Callback function
      */
-    onChange(callback) {
+    onChange(callback: (content: string) => void): void {
         this.onChangeCallback = callback;
     }
 
     /**
      * Focus editor
      */
-    focus() {
+    focus(): void {
         if (this.view) {
             this.view.focus();
         }
@@ -157,7 +156,7 @@ export class CodeEditor {
     /**
      * Destroy editor
      */
-    destroy() {
+    destroy(): void {
         if (this.view) {
             this.view.destroy();
             this.view = null;
@@ -168,8 +167,9 @@ export class CodeEditor {
      * Update theme (dark/light)
      * @param {string} theme - 'dark' or 'light'
      */
-    updateTheme(theme) {
+    updateTheme(theme: string): void {
         if (!this.view) return;
+        this.currentTheme = theme;
 
         // Reconfigure editor to apply new theme
         const currentContent = this.getValue();
@@ -193,7 +193,7 @@ export class CodeEditor {
      * @param {number} lineNumber - Line number (starting from 1)
      * @param {boolean} highlight - Whether to highlight the line
      */
-    scrollToLine(lineNumber, highlight = true) {
+    scrollToLine(lineNumber: number, highlight = true): void {
         if (!this.view || lineNumber < 1) return;
 
         try {
@@ -225,7 +225,7 @@ export class CodeEditor {
      * @param {string} searchText - Text to search for
      * @param {boolean} caseSensitive - Whether to be case sensitive
      */
-    searchAndScroll(searchText, caseSensitive = true) {
+    searchAndScroll(searchText: string, caseSensitive = true): boolean {
         if (!this.view || !searchText) return false;
 
         try {
@@ -255,4 +255,3 @@ export class CodeEditor {
         }
     }
 }
-

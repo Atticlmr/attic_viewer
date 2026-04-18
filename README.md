@@ -8,7 +8,7 @@
 
 # Attic Viewer
 
-[![Version](https://img.shields.io/badge/version-v1.2.0-blue.svg)](https://github.com/Atticlmr/attic_viewer)
+[![Version](https://img.shields.io/badge/version-v1.3.0-blue.svg)](https://github.com/Atticlmr/attic_viewer)
 [![License](https://img.shields.io/badge/license-Apache--2.0-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-web-orange.svg)](https://github.com/Atticlmr/attic_viewer)
 [![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6.svg)](https://github.com/Atticlmr/attic_viewer)
@@ -30,6 +30,20 @@
 - **Interactive Controls**: Drag joints in real-time
 - **Measurement Tools**: Measure distances between joints and links
 - **Code Editor**: Built-in CodeMirror editor with syntax highlighting
+- **Integrated Conversion Workflow**: Convert between URDF and MJCF directly from the viewer
+- **Export Packages**: Export converted models as ZIP packages with bundled assets and `mesh/` directory layout
+- **Physics Simulation**: Integrated MuJoCo runtime for MJCF models
+- **Web Deployment**: GitHub Pages workflow for automatic build and deployment on `main`
+
+## What's New in v1.3.0
+
+- Integrated the robot conversion workflow into the main viewer instead of keeping it as a standalone page
+- Added viewer export flow for URDF/MJCF with packaged assets in ZIP format
+- Normalized exported mesh assets into a dedicated `mesh/` folder
+- Improved URDF <-> MJCF conversion fidelity, including better handling of multi-joint bodies, default classes, actuators, and constraint-related metadata
+- Fixed export behavior so converted downloads are packaged consistently for direct reuse
+- Added GitHub Actions deployment for automatic GitHub Pages publishing on `main`
+- Completed the current TypeScript cleanup pass across adapters, controllers, renderers, utilities, and tests
 
 ## Getting Started
 
@@ -96,13 +110,10 @@ attic_viewer/
 
 This project has been migrated from JavaScript to TypeScript:
 
-- **Status**: ~91% type errors resolved
+- **Status**: TypeScript migration baseline completed for the current codebase
 - **Build**: Passing ✓
-- **Tests**: Passing (7 tests) ✓
-
-### Remaining TypeScript Issues
-
-Some type errors remain (primarily DOM element type inference), but these do not affect build or runtime.
+- **Type Check**: Passing ✓
+- **Tests**: Passing (10 tests) ✓
 
 ## Branches
 

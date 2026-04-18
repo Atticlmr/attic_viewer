@@ -2,21 +2,36 @@
  * UI Controller - Manages all UI panels and button interactions
  */
 import * as THREE from 'three';
+import type { SceneManager } from '../renderer/SceneManager.js';
+
+type AngleUnit = 'rad' | 'deg';
+
+interface UIControllerCallbacks {
+    onThemeChanged?: (theme: string) => void;
+    onAngleUnitChanged?: (unit: AngleUnit) => void;
+    onIgnoreLimitsChanged?: (ignoreLimits: boolean) => void;
+    onLanguageChanged?: (language: 'zh-CN' | 'en-US') => void;
+    onResetJoints?: () => void;
+    onMujocoReset?: () => void;
+    onMujocoToggleSimulate?: () => Promise<boolean | undefined> | boolean | undefined;
+    onReloadFolder?: () => void;
+    onOpenConverterDialog?: () => void;
+}
 
 export class UIController {
-    sceneManager: any;
-    angleUnit: string;
-    onThemeChanged: any;
-    onAngleUnitChanged: any;
-    onIgnoreLimitsChanged: any;
-    onLanguageChanged: any;
-    onResetJoints: any;
-    onMujocoReset: any;
-    onMujocoToggleSimulate: any;
-    onReloadFolder: any;
-    onOpenConverterDialog: any;
+    sceneManager: SceneManager | null;
+    angleUnit: AngleUnit;
+    onThemeChanged?: (theme: string) => void;
+    onAngleUnitChanged?: (unit: AngleUnit) => void;
+    onIgnoreLimitsChanged?: (ignoreLimits: boolean) => void;
+    onLanguageChanged?: (language: 'zh-CN' | 'en-US') => void;
+    onResetJoints?: () => void;
+    onMujocoReset?: () => void;
+    onMujocoToggleSimulate?: () => Promise<boolean | undefined> | boolean | undefined;
+    onReloadFolder?: () => void;
+    onOpenConverterDialog?: () => void;
 
-    constructor(sceneManager: any) {
+    constructor(sceneManager: SceneManager | null) {
         this.sceneManager = sceneManager;
         this.angleUnit = 'rad';
     }
@@ -24,7 +39,7 @@ export class UIController {
     /**
      * Setup control panel events
      */
-    setupControlPanel() {
+    setupControlPanel(): void {
         const showVisualBtn = document.getElementById('show-visual');
         const showCollisionBtn = document.getElementById('show-collision');
         const showComBtn = document.getElementById('show-com');
@@ -32,7 +47,7 @@ export class UIController {
         const ignoreLimitsBtn = document.getElementById('ignore-limits');
 
         // Helper function: toggle button state
-        const toggleButton = (button, callback) => {
+        const toggleButton = (button: HTMLElement | null, callback?: (nextState: boolean) => void) => {
             if (!button) return;
 
             const isActive = button.classList.contains('active');
@@ -216,7 +231,7 @@ export class UIController {
     /**
      * Setup theme toggle
      */
-    setupThemeToggle(onThemeChanged) {
+    setupThemeToggle(onThemeChanged?: (theme: string) => void): void {
         const themeToggle = document.getElementById('theme-toggle');
         if (!themeToggle) {
             return;
@@ -248,7 +263,7 @@ export class UIController {
     /**
      * Setup language toggle
      */
-    setupLanguageToggle(onLanguageChanged) {
+    setupLanguageToggle(onLanguageChanged?: (language: 'zh-CN' | 'en-US') => void): void {
         const languageToggle = document.getElementById('language-toggle');
         if (!languageToggle) {
             return;
@@ -270,7 +285,7 @@ export class UIController {
     /**
      * Update language icon
      */
-    updateLanguageIcon(lang) {
+    updateLanguageIcon(lang: 'zh-CN' | 'en-US'): void {
         const languageToggle = document.getElementById('language-toggle');
         const text = languageToggle?.querySelector('.tool-button-text');
         if (text) {
@@ -282,7 +297,7 @@ export class UIController {
     /**
      * Update theme icon
      */
-    updateThemeIcon(theme) {
+    updateThemeIcon(theme: string): void {
         const themeToggle = document.getElementById('theme-toggle');
         const icon = themeToggle?.querySelector('.tool-button-icon');
         if (icon) {
@@ -294,7 +309,7 @@ export class UIController {
     /**
      * Setup panel close button functionality
      */
-    setupPanelCloseButtons() {
+    setupPanelCloseButtons(): void {
         const panelButtonMap = {
             'floating-files-panel': 'toggle-files-panel',
             'floating-joints-panel': 'toggle-joints-panel',
@@ -520,7 +535,7 @@ export class UIController {
     /**
      * Setup conversion dialog trigger
      */
-    setupConversionTrigger() {
+    setupConversionTrigger(): void {
         const converterPageBtn = document.getElementById('open-converter-page-btn');
         if (converterPageBtn) {
             converterPageBtn.addEventListener('click', () => {
@@ -532,7 +547,7 @@ export class UIController {
     /**
      * Setup all buttons and panels
      */
-    setupAll(callbacks: any = {}) {
+    setupAll(callbacks: UIControllerCallbacks = {}): void {
         // Save all callbacks (before setupControlPanel)
         this.onAngleUnitChanged = callbacks.onAngleUnitChanged;
         this.onIgnoreLimitsChanged = callbacks.onIgnoreLimitsChanged;
@@ -557,7 +572,7 @@ export class UIController {
     /**
      * Setup reload folder button
      */
-    setupReloadFolderButton() {
+    setupReloadFolderButton(): void {
         const reloadBtn = document.getElementById('reload-folder-btn');
         if (reloadBtn) {
             reloadBtn.addEventListener('click', (e) => {
@@ -572,7 +587,7 @@ export class UIController {
     /**
      * Get current angle unit
      */
-    getAngleUnit() {
+    getAngleUnit(): AngleUnit {
         return this.angleUnit;
     }
 }

@@ -1,14 +1,23 @@
 import * as THREE from 'three';
+import type { SceneManager } from './SceneManager.js';
+import type { Link, UnifiedRobotModel } from '../models/UnifiedRobotModel.js';
+
+type HighlightableObject = THREE.Object3D & {
+    isURDFLink?: boolean;
+    isURDFJoint?: boolean;
+    isURDFCollider?: boolean;
+    __origMaterial?: THREE.Material | THREE.Material[];
+};
 
 /**
  * HighlightManager - Handles link highlighting and hover information display
  */
 export class HighlightManager {
-    sceneManager: any;
-    currentHighlightedLink: any;
-    highlightMaterial: any;
+    sceneManager: SceneManager;
+    currentHighlightedLink: Link | null;
+    highlightMaterial: THREE.MeshPhongMaterial;
 
-    constructor(sceneManager: any) {
+    constructor(sceneManager: SceneManager) {
         this.sceneManager = sceneManager;
         this.currentHighlightedLink = null;
 
@@ -24,7 +33,7 @@ export class HighlightManager {
     /**
      * Highlight link (based on link selection, not joint)
      */
-    highlightLink(link, currentModel) {
+    highlightLink(link: Link | null, currentModel: UnifiedRobotModel | null): void {
         if (!link) return;
 
         // If already highlighted the same link, return directly (use name comparison)
@@ -55,7 +64,7 @@ export class HighlightManager {
     /**
      * Unhighlight link
      */
-    unhighlightLink(link, currentModel) {
+    unhighlightLink(link: Link | null, currentModel: UnifiedRobotModel | null): void {
         if (!link) return;
 
         // Clear current highlighted link record (use name comparison)
@@ -78,9 +87,9 @@ export class HighlightManager {
     /**
      * Highlight link geometry
      */
-    highlightLinkGeometry(linkObject, currentModel) {
+    highlightLinkGeometry(linkObject: THREE.Object3D, currentModel: UnifiedRobotModel | null): void {
         // Traverse current link and its fixed child links
-        const traverseNonRecursive = (obj, isRoot = false) => {
+        const traverseNonRecursive = (obj: HighlightableObject, isRoot = false): void => {
             // If not root and is URDFLink, stop (this is a non-fixed child link)
             if (!isRoot && (obj.type === 'URDFLink' || obj.isURDFLink)) {
                 return;
@@ -110,7 +119,7 @@ export class HighlightManager {
             }
 
             // Process mesh
-            if (obj.type === 'Mesh' || obj.isMesh) {
+            if (obj instanceof THREE.Mesh) {
                 // Skip collision mesh (collision is highlighted separately)
                 if (obj.isURDFCollider) {
                     return;
@@ -128,8 +137,8 @@ export class HighlightManager {
 
                 if (isInertia || isCollision) {
                     // For inertia and collision, keep original color but increase opacity slightly
-                    const originalMat = obj.__origMaterial;
-                    if (originalMat.isMeshPhongMaterial) {
+                    const originalMat = Array.isArray(obj.__origMaterial) ? obj.__origMaterial[0] : obj.__origMaterial;
+                    if (originalMat instanceof THREE.MeshPhongMaterial) {
                         obj.material = new THREE.MeshPhongMaterial({
                             transparent: true,
                             opacity: Math.min((originalMat.opacity || 0.35) + 0.15, 0.7), // Increase opacity by 0.15
@@ -145,8 +154,8 @@ export class HighlightManager {
                     }
                 } else if (isCOM) {
                     // For COM, keep original color but add emissive glow
-                    const originalMat = obj.__origMaterial;
-                    if (originalMat.isMeshBasicMaterial) {
+                    const originalMat = Array.isArray(obj.__origMaterial) ? obj.__origMaterial[0] : obj.__origMaterial;
+                    if (originalMat instanceof THREE.MeshBasicMaterial) {
                         obj.material = new THREE.MeshBasicMaterial({
                             color: originalMat.color.clone(),
                             side: originalMat.side,
@@ -167,20 +176,20 @@ export class HighlightManager {
 
             // Recursively process children
             for (const child of obj.children) {
-                traverseNonRecursive(child, false);
+                traverseNonRecursive(child as HighlightableObject, false);
             }
         };
 
         // Start traversing from root link
-        traverseNonRecursive(linkObject, true);
+        traverseNonRecursive(linkObject as HighlightableObject, true);
     }
 
     /**
      * Unhighlight link geometry
      */
-    unhighlightLinkGeometry(linkObject, currentModel) {
+    unhighlightLinkGeometry(linkObject: THREE.Object3D, currentModel: UnifiedRobotModel | null): void {
         // Traverse current link and its fixed child links
-        const traverseNonRecursive = (obj, isRoot = false) => {
+        const traverseNonRecursive = (obj: HighlightableObject, isRoot = false): void => {
             // If not root and is URDFLink, stop (this is a non-fixed child link)
             if (!isRoot && (obj.type === 'URDFLink' || obj.isURDFLink)) {
                 return;
@@ -210,7 +219,7 @@ export class HighlightManager {
             }
 
             // Process mesh
-            if (obj.type === 'Mesh' || obj.isMesh) {
+            if (obj instanceof THREE.Mesh) {
                 // Restore material for all meshes (including COM and inertia)
                 if (obj.__origMaterial) {
                     obj.material = obj.__origMaterial;
@@ -220,18 +229,18 @@ export class HighlightManager {
 
             // Recursively process children
             for (const child of obj.children) {
-                traverseNonRecursive(child, false);
+                traverseNonRecursive(child as HighlightableObject, false);
             }
         };
 
         // Start traversing from root link
-        traverseNonRecursive(linkObject, true);
+        traverseNonRecursive(linkObject as HighlightableObject, true);
     }
 
     /**
      * Check if object is auxiliary visualization object (should not be highlighted)
      */
-    isAuxiliaryVisualization(obj) {
+    isAuxiliaryVisualization(obj: THREE.Object3D): boolean {
         // Check userData markers
         if (obj.userData?.isInertiaBox) return true;
         if (obj.userData?.isCOMMarker) return true;
@@ -244,7 +253,7 @@ export class HighlightManager {
     /**
      * Show hover information (Link name, parent Joint name, mass, pose)
      */
-    showHoverInfo(link, currentModel) {
+    showHoverInfo(link: Link, currentModel: UnifiedRobotModel | null): void {
         const hoverInfo = document.getElementById('hover-info');
         const jointNameEl = document.getElementById('hover-joint-name');
         const linkNameEl = document.getElementById('hover-link-name');
@@ -299,10 +308,10 @@ export class HighlightManager {
         // Line 3: Display mass (including all child links connected via fixed joints)
         let totalMass = 0;
         let hasMass = false;
-        let mergedLinks = [];  // Collect all merged link names
+        const mergedLinks: string[] = [];  // Collect all merged link names
 
         // Recursively calculate mass of all fixed child links
-        const calculateTotalMass = (linkObj, isRoot = true) => {
+        const calculateTotalMass = (linkObj: THREE.Object3D, isRoot = true): void => {
             // Get current link's mass and name
             const linkName = linkObj.name;
             if (linkName && currentModel?.links && currentModel.links.has(linkName)) {
@@ -409,7 +418,7 @@ export class HighlightManager {
     /**
      * Hide hover information
      */
-    hideHoverInfo() {
+    hideHoverInfo(): void {
         const hoverInfo = document.getElementById('hover-info');
         if (hoverInfo) {
             hoverInfo.classList.remove('visible');
@@ -419,11 +428,10 @@ export class HighlightManager {
     /**
      * Clear all highlights
      */
-    clearHighlight() {
+    clearHighlight(): void {
         // Clear link highlight
         if (this.currentHighlightedLink) {
             this.unhighlightLink(this.currentHighlightedLink, this.sceneManager.currentModel);
         }
     }
 }
-

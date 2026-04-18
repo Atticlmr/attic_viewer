@@ -4,15 +4,30 @@
  */
 import { ModelLoaderFactory } from '../loaders/ModelLoaderFactory.js';
 import { XMLUpdater } from '../utils/XMLUpdater.js';
+import type { SceneManager } from '../renderer/SceneManager.js';
+import type { CodeEditorManager } from '../controllers/CodeEditorManager.js';
+import type { Joint, JointLimits, UnifiedRobotModel } from '../models/UnifiedRobotModel.js';
+
+type AngleUnit = 'rad' | 'deg';
+
+type JointLimitUpdate = Partial<Pick<JointLimits, 'lower' | 'upper' | 'effort' | 'velocity'>>;
+
+type JointControlElement = HTMLDivElement & {
+    _updateDisplay?: () => void;
+};
+
+type JointSliderElement = HTMLInputElement & {
+    _pendingRender?: boolean;
+};
 
 export class JointControlsUI {
-    sceneManager: any;
-    angleUnit: string;
-    initialJointValues: any;
-    codeEditorManager: any;
+    sceneManager: SceneManager;
+    angleUnit: AngleUnit;
+    initialJointValues: Map<string, number>;
+    codeEditorManager: CodeEditorManager | null;
     isUpdatingFromEditor: boolean;
 
-    constructor(sceneManager: any) {
+    constructor(sceneManager: SceneManager) {
         this.sceneManager = sceneManager;
         this.angleUnit = 'rad';
         this.initialJointValues = new Map(); // Save initial joint positions when model loads
@@ -23,14 +38,14 @@ export class JointControlsUI {
     /**
      * Set code editor manager reference
      */
-    setCodeEditorManager(codeEditorManager) {
+    setCodeEditorManager(codeEditorManager: CodeEditorManager): void {
         this.codeEditorManager = codeEditorManager;
     }
 
     /**
      * Update XML content in editor (URDF format only)
      */
-    updateEditorXML(jointName, limits) {
+    updateEditorXML(jointName: string, limits: JointLimitUpdate): void {
         // If updating from editor, skip
         if (this.isUpdatingFromEditor) {
             return;
@@ -66,6 +81,10 @@ export class JointControlsUI {
             // If content changed, update editor
             if (updatedXML !== currentContent) {
                 // Save cursor position
+                if (!editor.view) {
+                    return;
+                }
+
                 const cursorPos = editor.view.state.selection.main.head;
 
                 // Update content
@@ -78,7 +97,7 @@ export class JointControlsUI {
                     editor.view.dispatch({
                         selection: { anchor: newPos, head: newPos }
                     });
-                } catch (e) {
+                } catch {
                     // Ignore cursor restoration errors
                 }
             }
@@ -95,7 +114,7 @@ export class JointControlsUI {
     /**
      * Setup joint controls
      */
-    setupJointControls(model) {
+    setupJointControls(model: UnifiedRobotModel | null): void {
         const container = document.getElementById('joint-controls');
         if (!container) return;
 
@@ -110,7 +129,7 @@ export class JointControlsUI {
         }
 
         let controllableJoints = 0;
-        model.joints.forEach((joint) => {
+        model.joints.forEach((joint: Joint) => {
             if (joint.type !== 'fixed') {
                 controllableJoints++;
             }
@@ -126,9 +145,9 @@ export class JointControlsUI {
 
         // Save initial joint values when model loads
         this.initialJointValues.clear();
-        model.joints.forEach((joint, name) => {
+        model.joints.forEach((joint: Joint, name: string) => {
             if (joint.type !== 'fixed') {
-                const limits = joint.limits || {};
+                const limits: Partial<JointLimits> = joint.limits || {};
                 const lower = limits.lower !== undefined ? limits.lower : -Math.PI;
                 const upper = limits.upper !== undefined ? limits.upper : Math.PI;
                 const initialValue = joint.currentValue !== undefined ? joint.currentValue : (lower + upper) / 2;
@@ -136,7 +155,7 @@ export class JointControlsUI {
             }
         });
 
-        model.joints.forEach((joint, name) => {
+        model.joints.forEach((joint: Joint) => {
             if (joint.type === 'fixed') return;
             const control = this.createJointControl(joint, model);
             container.appendChild(control);
@@ -146,8 +165,8 @@ export class JointControlsUI {
     /**
      * Create joint control element
      */
-    createJointControl(joint, model) {
-        const div = document.createElement('div');
+    createJointControl(joint: Joint, model: UnifiedRobotModel): JointControlElement {
+        const div = document.createElement('div') as JointControlElement;
         div.className = 'joint-control';
 
         // First row: name + value
@@ -165,7 +184,7 @@ export class JointControlsUI {
         const sliderRow = document.createElement('div');
         sliderRow.className = 'joint-slider-row';
 
-        const limits = joint.limits || {};
+        const limits: Partial<JointLimits> = joint.limits || {};
         let lower = limits.lower !== undefined ? limits.lower : -Math.PI;
         let upper = limits.upper !== undefined ? limits.upper : Math.PI;
 
@@ -174,7 +193,7 @@ export class JointControlsUI {
             upper = Math.PI;
         }
 
-        const slider = document.createElement('input') as HTMLInputElement;
+        const slider = document.createElement('input') as JointSliderElement;
         slider.type = 'range';
         slider.className = 'joint-slider';
         slider.setAttribute('data-joint', joint.name);
@@ -235,13 +254,13 @@ export class JointControlsUI {
 
         // Lower limit edit event
         minLabel.addEventListener('change', () => {
-            let inputValue = parseFloat(minLabel.value);
+            const inputValue = parseFloat(minLabel.value);
             if (isNaN(inputValue)) {
                 updateLabels();
                 return;
             }
 
-            let valueInRad = this.angleUnit === 'deg' ?
+            const valueInRad = this.angleUnit === 'deg' ?
                 inputValue * Math.PI / 180 :
                 inputValue;
 
@@ -283,13 +302,13 @@ export class JointControlsUI {
 
         // Upper limit edit event
         maxLabel.addEventListener('change', () => {
-            let inputValue = parseFloat(maxLabel.value);
+            const inputValue = parseFloat(maxLabel.value);
             if (isNaN(inputValue)) {
                 updateLabels();
                 return;
             }
 
-            let valueInRad = this.angleUnit === 'deg' ?
+            const valueInRad = this.angleUnit === 'deg' ?
                 inputValue * Math.PI / 180 :
                 inputValue;
 
@@ -364,7 +383,7 @@ export class JointControlsUI {
             effortInput.step = '0.1';
             // Read actual value from model, show empty string if not available
             const effortValue = limits.effort !== null && limits.effort !== undefined ? limits.effort : '';
-            effortInput.value = effortValue;
+            effortInput.value = String(effortValue);
             effortInput.placeholder = '-';
             effortInput.title = 'Effort (max force/torque)';
 
@@ -386,7 +405,7 @@ export class JointControlsUI {
             velocityInput.step = '0.1';
             // Read actual value from model, show empty string if not available
             const velocityValue = limits.velocity !== null && limits.velocity !== undefined ? limits.velocity : '';
-            velocityInput.value = velocityValue;
+            velocityInput.value = String(velocityValue);
             velocityInput.placeholder = '-';
             velocityInput.title = 'Velocity (max speed)';
 
@@ -399,7 +418,7 @@ export class JointControlsUI {
 
             // Effort input event
             effortInput.addEventListener('change', () => {
-                let inputValue = parseFloat(effortInput.value);
+                const inputValue = parseFloat(effortInput.value);
                 if (isNaN(inputValue) || effortInput.value === '') {
                     // If input is empty or invalid, set to null
                     if (!joint.limits) {
@@ -432,7 +451,7 @@ export class JointControlsUI {
 
             // Velocity input event
             velocityInput.addEventListener('change', () => {
-                let inputValue = parseFloat(velocityInput.value);
+                const inputValue = parseFloat(velocityInput.value);
                 if (isNaN(inputValue) || velocityInput.value === '') {
                     // If input is empty or invalid, set to null
                     if (!joint.limits) {
@@ -487,9 +506,8 @@ export class JointControlsUI {
                 this.sceneManager.constraintManager.applyConstraints(model, joint);
             }
 
-            const sliderAny = slider as any;
-            if (!sliderAny._pendingRender) {
-                sliderAny._pendingRender = true;
+            if (!slider._pendingRender) {
+                slider._pendingRender = true;
                 requestAnimationFrame(() => {
                     this.sceneManager.redraw();
                     this.sceneManager.render();
@@ -499,14 +517,14 @@ export class JointControlsUI {
                         this.sceneManager.onMeasurementUpdate();
                     }
 
-                    sliderAny._pendingRender = false;
+                    slider._pendingRender = false;
                 });
             }
         });
 
         // Manual input event
         valueInput.addEventListener('change', () => {
-            let inputValue = parseFloat(valueInput.value);
+            const inputValue = parseFloat(valueInput.value);
             if (isNaN(inputValue)) {
                 updateValueInput();
                 return;
@@ -540,7 +558,7 @@ export class JointControlsUI {
         });
 
         // Save update function
-        (div as any)._updateDisplay = () => {
+        div._updateDisplay = () => {
             updateValueInput();
             updateLabels();
             valueUnit.textContent = this.angleUnit === 'deg' ? '°' : 'rad';
@@ -552,12 +570,13 @@ export class JointControlsUI {
     /**
      * Set angle unit
      */
-    setAngleUnit(unit) {
+    setAngleUnit(unit: AngleUnit): void {
         this.angleUnit = unit;
         const controls = document.querySelectorAll('.joint-control');
         controls.forEach(control => {
-            if ((control as any)._updateDisplay) {
-                (control as any)._updateDisplay();
+            const jointControl = control as JointControlElement;
+            if (jointControl._updateDisplay) {
+                jointControl._updateDisplay();
             }
         });
     }
@@ -565,16 +584,16 @@ export class JointControlsUI {
     /**
      * Reset all joints to initial positions when model loaded
      */
-    resetAllJoints(model) {
+    resetAllJoints(model: UnifiedRobotModel | null): void {
         if (!model || !model.joints) return;
 
-        model.joints.forEach((joint, name) => {
+        model.joints.forEach((joint: Joint, name: string) => {
             if (joint.type !== 'fixed') {
                 // Use saved initial value, if not saved use middle value
                 let initialValue = this.initialJointValues.get(name);
 
                 if (initialValue === undefined) {
-                    const limits = joint.limits || {};
+                    const limits: Partial<JointLimits> = joint.limits || {};
                     const lower = limits.lower !== undefined ? limits.lower : -Math.PI;
                     const upper = limits.upper !== undefined ? limits.upper : Math.PI;
                     initialValue = joint.currentValue !== undefined ? joint.currentValue : (lower + upper) / 2;
@@ -588,9 +607,9 @@ export class JointControlsUI {
                 const slider = document.querySelector(`input[data-joint="${name}"]`) as HTMLInputElement | null;
                 if (slider) {
                     slider.value = String(initialValue);
-                    const control = slider.closest('.joint-control') as HTMLDivElement | null;
-                    if (control && (control as any)._updateDisplay) {
-                        (control as any)._updateDisplay();
+                    const control = slider.closest('.joint-control') as JointControlElement | null;
+                    if (control && control._updateDisplay) {
+                        control._updateDisplay();
                     }
                 }
             }
@@ -607,12 +626,15 @@ export class JointControlsUI {
     /**
      * Update limits for all sliders
      */
-    updateAllSliderLimits(model, ignoreLimits) {
+    updateAllSliderLimits(model: UnifiedRobotModel | null, ignoreLimits: boolean): void {
         if (!model) return;
 
         document.querySelectorAll('.joint-slider').forEach(sliderEl => {
             const slider = sliderEl as HTMLInputElement;
             const jointName = slider.getAttribute('data-joint');
+            if (!jointName) {
+                return;
+            }
             const joint = model.joints.get(jointName);
 
             if (joint && joint.type !== 'fixed') {
@@ -621,7 +643,7 @@ export class JointControlsUI {
                     slider.max = String(Math.PI * 2);
                     slider.step = '0.01';
                 } else {
-                    const limits = joint.limits || {};
+                    const limits: Partial<JointLimits> = joint.limits || {};
                     const lower = limits.lower !== undefined ? limits.lower : -Math.PI;
                     const upper = limits.upper !== undefined ? limits.upper : Math.PI;
 
@@ -635,9 +657,9 @@ export class JointControlsUI {
                     slider.step = String((parseFloat(slider.max) - parseFloat(slider.min)) / 1000);
                 }
 
-                const control = slider.closest('.joint-control') as HTMLDivElement | null;
-                if (control && (control as any)._updateDisplay) {
-                    (control as any)._updateDisplay();
+                const control = slider.closest('.joint-control') as JointControlElement | null;
+                if (control && control._updateDisplay) {
+                    control._updateDisplay();
                 }
             }
         });

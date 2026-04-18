@@ -2,11 +2,84 @@
  * MJCF Adapter
  * Parses MJCF XML and converts to unified model
  */
-import { UnifiedRobotModel, Link, Joint, JointLimits, VisualGeometry, CollisionGeometry, InertialProperties, GeometryType, Constraint } from '../models/UnifiedRobotModel.js';
+import { UnifiedRobotModel, Link, Joint, JointLimits, VisualGeometry, CollisionGeometry, InertialProperties, GeometryType, Constraint, type Origin } from '../models/UnifiedRobotModel.js';
 import * as THREE from 'three';
 import { loadMeshFile, ensureMeshHasPhongMaterial, getLoaders } from '../utils/MeshLoader.js';
 
+interface MJCFRgba {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+}
+
+interface MJCFMaterialInfo {
+    rgba?: MJCFRgba;
+    specular?: number;
+    shininess?: number;
+}
+
+type MJCFMeshAssetData =
+    | { type: 'file'; path: string; scale: number[] }
+    | { type: 'vertex'; vertices: Float32Array; scale: number[] };
+
+interface MJCFDefaults {
+    mesh?: {
+        scale?: number[];
+    };
+    joint?: {
+        type?: string;
+        axis?: number[];
+        range?: number[];
+        damping?: number;
+    };
+    geom?: {
+        contype?: number;
+        conaffinity?: number;
+        group?: number;
+        rgba?: MJCFRgba;
+        material?: string;
+        type?: string;
+        density?: number;
+    };
+}
+
+type MJCFStoredOrigin = Origin;
+type MJCFQuaternion = [number, number, number, number];
+type MJCFSceneGroup = THREE.Group & {
+    isURDFLink?: boolean;
+    isURDFJoint?: boolean;
+    isURDFCollider?: boolean;
+    jointType?: string;
+    axis?: THREE.Vector3;
+};
+
 export class MJCFAdapter {
+    static readonly DEFAULT_ORIGIN: Origin = { xyz: [0, 0, 0], rpy: [0, 0, 0] };
+
+    static getStoredOrigin(value: unknown): MJCFStoredOrigin {
+        if (
+            value &&
+            typeof value === 'object' &&
+            Array.isArray((value as Origin).xyz) &&
+            Array.isArray((value as Origin).rpy)
+        ) {
+            return value as MJCFStoredOrigin;
+        }
+
+        return { ...this.DEFAULT_ORIGIN };
+    }
+
+    static isRgba(value: unknown): value is MJCFRgba {
+        return Boolean(
+            value &&
+            typeof value === 'object' &&
+            'r' in value &&
+            'g' in value &&
+            'b' in value &&
+            'a' in value
+        );
+    }
     /**
      * Process include tags in MJCF XML
      * Replaces <include file="path"/> with the content of the referenced file
@@ -415,8 +488,8 @@ export class MJCFAdapter {
      * @param {Document} doc - XML document
      * @returns {Map<string, object>} Mapping from material names to material properties
      */
-    static parseMaterials(doc) {
-        const materialMap = new Map();
+    static parseMaterials(doc: Document): Map<string, MJCFMaterialInfo> {
+        const materialMap = new Map<string, MJCFMaterialInfo>();
         const asset = doc.querySelector('asset');
         if (!asset) {
             return materialMap;
@@ -427,7 +500,7 @@ export class MJCFAdapter {
             const name = matEl.getAttribute('name');
             if (!name) return;
 
-            const material: any = {};
+            const material: MJCFMaterialInfo = {};
 
             // Parse rgba
             const rgba = matEl.getAttribute('rgba');
@@ -466,16 +539,16 @@ export class MJCFAdapter {
      * @param {Document} doc - XML document
      * @returns {object} Object containing classDefaults Map and rootDefaults object
      */
-    static parseDefaults(doc) {
-        const classDefaults = new Map();
-        let rootDefaults = {};
+    static parseDefaults(doc: Document): { classDefaults: Map<string, MJCFDefaults>; rootDefaults: MJCFDefaults } {
+        const classDefaults = new Map<string, MJCFDefaults>();
+        const rootDefaults: MJCFDefaults = {};
 
         // Recursively parse default tags
-        const parseDefaultElement = (defaultEl, parentDefaults = {}) => {
+        const parseDefaultElement = (defaultEl: Element, parentDefaults: MJCFDefaults = {}) => {
             const className = defaultEl.getAttribute('class');
 
             // Start from parent defaults, deep copy to avoid reference issues
-            const defaults = JSON.parse(JSON.stringify(parentDefaults || {}));
+            const defaults: MJCFDefaults = JSON.parse(JSON.stringify(parentDefaults || {})) as MJCFDefaults;
 
             // Parse mesh default values
             const meshEl = defaultEl.querySelector(':scope > mesh');
@@ -621,7 +694,11 @@ export class MJCFAdapter {
      * @param {object} rootDefaults - Root default properties
      * @returns {object} Inherited properties object
      */
-    static getGeomInheritedProperties(geomEl, classDefaults, rootDefaults) {
+    static getGeomInheritedProperties(
+        geomEl: Element,
+        classDefaults: Map<string, MJCFDefaults> | null,
+        rootDefaults: MJCFDefaults | null
+    ): Required<NonNullable<MJCFDefaults['geom']>> {
         const inherited = {
             contype: null,
             conaffinity: null,
@@ -849,7 +926,7 @@ export class MJCFAdapter {
      * @param {Element} geomEl - geom element
      * @param {Map} meshMap - Mapping from mesh names to file paths
      */
-    static parseGeom(geomEl, meshMap = null) {
+    static parseGeom(geomEl: Element, meshMap: Map<string, MJCFMeshAssetData> | null = null): GeometryType | null {
         // In MJCF, if geom has mesh attribute, type should be mesh
         const meshAttr = geomEl.getAttribute('mesh');
         let type = geomEl.getAttribute('type');
@@ -936,6 +1013,10 @@ export class MJCFAdapter {
                 // If meshMap exists, try to find data corresponding to mesh name
                 if (meshMap && meshMap.has(meshRef)) {
                     const meshData = meshMap.get(meshRef);
+                    if (!meshData) {
+                        geometry.filename = meshRef;
+                        break;
+                    }
                     if (meshData.type === 'file') {
                         // External file mesh
                         geometry.filename = meshData.path;
@@ -965,8 +1046,8 @@ export class MJCFAdapter {
     /**
      * Parse origin attribute (pos + quat or xyz + rpy)
      */
-    static parseOrigin(element) {
-        const origin: any = { xyz: [0, 0, 0], rpy: [0, 0, 0] };
+    static parseOrigin(element: Element): Origin {
+        const origin: Origin = { xyz: [0, 0, 0], rpy: [0, 0, 0] };
 
         // Check pos attribute
         const pos = element.getAttribute('pos');
@@ -983,7 +1064,7 @@ export class MJCFAdapter {
             const qw = q[0], qx = q[1], qy = q[2], qz = q[3];
 
             // Save original quaternion (for inertia visualization)
-            origin.quat = { w: qw, x: qx, y: qy, z: qz };
+            origin.quat = [qx, qy, qz, qw];
 
             // Convert to Euler angles
             origin.rpy = this.quaternionToEuler(qw, qx, qy, qz);
@@ -1002,7 +1083,7 @@ export class MJCFAdapter {
     /**
      * Convert quaternion to Euler angles (simplified version)
      */
-    static quaternionToEuler(w, x, y, z) {
+    static quaternionToEuler(w: number, x: number, y: number, z: number): number[] {
         // Normalize quaternion first (MJCF may use non-normalized quaternions)
         const norm = Math.sqrt(w * w + x * x + y * y + z * z);
         if (norm > 0) {
@@ -1078,11 +1159,11 @@ export class MJCFAdapter {
         };
 
         // If quat exists, need to rotate inertia tensor
-        if (origin.quat) {
+        if (origin.quat && origin.quat.length >= 4) {
             const rotated = this.rotateInertiaTensor(
                 mjcf_ixx, mjcf_iyy, mjcf_izz,
                 mjcf_ixy, mjcf_ixz, mjcf_iyz,
-                origin.quat
+                origin.quat as MJCFQuaternion
             );
             mjcf_ixx = rotated.ixx;
             mjcf_iyy = rotated.iyy;
@@ -1198,8 +1279,16 @@ export class MJCFAdapter {
     /**
      * Rotate inertia tensor: I_rotated = R * I * R^T
      */
-    static rotateInertiaTensor(ixx, iyy, izz, ixy, ixz, iyz, quat) {
-        const {w, x, y, z} = quat;
+    static rotateInertiaTensor(
+        ixx: number,
+        iyy: number,
+        izz: number,
+        ixy: number,
+        ixz: number,
+        iyz: number,
+        quat: MJCFQuaternion
+    ) {
+        const [x, y, z, w] = quat;
 
         // Build rotation matrix R (from quaternion)
         const r11 = 1 - 2*(y*y + z*z);
@@ -1549,7 +1638,11 @@ export class MJCFAdapter {
      * @param {Map} fileMap - File map for loading mesh files
      * @param {Map} meshMap - Mesh name to file path mapping (optional)
      */
-    static async createThreeObject(model, fileMap = null, meshMap = null) {
+    static async createThreeObject(
+        model: UnifiedRobotModel,
+        fileMap: Map<string, File> | null = null,
+        _meshMap: Map<string, MJCFMeshAssetData> | null = null
+    ): Promise<void> {
         // Preload loaders
         await getLoaders();
 
@@ -1557,10 +1650,10 @@ export class MJCFAdapter {
         rootGroup.name = model.name;
 
         // Create Three.js objects for all links (but don't add to scene yet)
-        const linkObjects = new Map();
+        const linkObjects = new Map<string, MJCFSceneGroup>();
 
         // Collect all unique mesh file paths (only need visual, as MJCF doesn't create collision separately)
-        const uniqueMeshFiles = new Set();
+        const uniqueMeshFiles = new Set<string>();
         for (const [name, link] of model.links) {
             for (const visual of link.visuals) {
                 if (visual.geometry.type === 'mesh' && visual.geometry.filename) {
@@ -1579,7 +1672,7 @@ export class MJCFAdapter {
 
         // Wait for all mesh loading to complete
         const meshResults = await Promise.all(meshPromises);
-        const meshCache = new Map();
+        const meshCache = new Map<string, THREE.BufferGeometry | THREE.Object3D | null>();
 
         // Build mesh cache (filename -> geometry)
         let index = 0;
@@ -1589,12 +1682,10 @@ export class MJCFAdapter {
         }
 
         // Create link groups
-        let totalVisuals = 0;
         for (const [name, link] of model.links) {
-            const linkGroup: any = new THREE.Group();
+            const linkGroup = new THREE.Group() as MJCFSceneGroup;
             linkGroup.name = name;
             linkGroup.isURDFLink = true; // Mark as link for JointDragControls recognition
-            linkGroup.type = 'URDFLink'; // Set type
 
             // [Critical] Do not apply body.pos on linkGroup!
             // body.pos should be applied on the jointGroup that connects it
@@ -1611,7 +1702,11 @@ export class MJCFAdapter {
                     // Check if this geom has fromto data (for capsule/cylinder)
                     if (visual.geometry && visual.geometry.fromto) {
                         // Use fromto center position
-                        mesh.position.set(...visual.geometry.fromto.center);
+                        mesh.position.set(
+                            visual.geometry.fromto.center[0],
+                            visual.geometry.fromto.center[1],
+                            visual.geometry.fromto.center[2]
+                        );
                         // Apply fromto rotation plus any explicit rotation
                         const fromtoRpy = visual.geometry.fromto.rpy;
                         mesh.rotation.set(
@@ -1620,13 +1715,13 @@ export class MJCFAdapter {
                             fromtoRpy[2] + visual.origin.rpy[2]
                         );
                     } else {
-                        mesh.position.set(...visual.origin.xyz);
-                        mesh.rotation.set(...visual.origin.rpy);
+                        mesh.position.set(visual.origin.xyz[0], visual.origin.xyz[1], visual.origin.xyz[2]);
+                        mesh.rotation.set(visual.origin.rpy[0], visual.origin.rpy[1], visual.origin.rpy[2]);
                     }
                     mesh.name = visual.name || 'visual';
 
                     // If MJCF defines rgba color, apply to mesh
-                    if (visual.userData && visual.userData.rgba) {
+                    if (visual.userData && this.isRgba(visual.userData.rgba)) {
                         const rgba = visual.userData.rgba;
                         const color = new THREE.Color(rgba.r, rgba.g, rgba.b);
 
@@ -1726,7 +1821,6 @@ export class MJCFAdapter {
 
                     linkGroup.add(mesh);
                     visual.threeObject = mesh;
-                    totalVisuals++;
                     linkVisualCount++;
                 }
             }
@@ -1739,7 +1833,11 @@ export class MJCFAdapter {
                     // Check if this geom has fromto data (for capsule/cylinder)
                     if (collision.geometry && collision.geometry.fromto) {
                         // Use fromto center position
-                        mesh.position.set(...collision.geometry.fromto.center);
+                        mesh.position.set(
+                            collision.geometry.fromto.center[0],
+                            collision.geometry.fromto.center[1],
+                            collision.geometry.fromto.center[2]
+                        );
                         // Apply fromto rotation plus any explicit rotation
                         const fromtoRpy = collision.geometry.fromto.rpy;
                         mesh.rotation.set(
@@ -1748,13 +1846,13 @@ export class MJCFAdapter {
                             fromtoRpy[2] + collision.origin.rpy[2]
                         );
                     } else {
-                        mesh.position.set(...collision.origin.xyz);
-                        mesh.rotation.set(...collision.origin.rpy);
+                        mesh.position.set(collision.origin.xyz[0], collision.origin.xyz[1], collision.origin.xyz[2]);
+                        mesh.rotation.set(collision.origin.rpy[0], collision.origin.rpy[1], collision.origin.rpy[2]);
                     }
                     mesh.name = collision.name || 'collision';
 
                     // Create collision body container (similar to URDF handling)
-                    const colliderGroup: any = new THREE.Group();
+                    const colliderGroup = new THREE.Group() as MJCFSceneGroup;
                     colliderGroup.name = `${name}_collider_${linkCollisionCount}`;
                     colliderGroup.isURDFCollider = true; // Mark as collision body
                     colliderGroup.add(mesh);
@@ -1771,9 +1869,12 @@ export class MJCFAdapter {
 
 
         // Build hierarchy based on body parent-child relationships (MJCF bodies are nested)
-        const bodyMap = new Map();
+        const bodyMap = new Map<string, { link: Link; parentName: string | null }>();
         for (const [name, link] of model.links) {
-            bodyMap.set(name, { link, parentName: link.userData.parentName });
+            bodyMap.set(name, {
+                link,
+                parentName: typeof link.userData.parentName === 'string' ? link.userData.parentName : null
+            });
         }
 
         // Find root body (body without parent)
@@ -1782,7 +1883,7 @@ export class MJCFAdapter {
         );
 
         // Recursively build hierarchy
-        function buildHierarchy(linkName, parentGroup) {
+        const buildHierarchy = (linkName: string, parentGroup: THREE.Object3D): void => {
             const linkGroup = linkObjects.get(linkName);
             if (!linkGroup) return;
 
@@ -1790,25 +1891,27 @@ export class MJCFAdapter {
             parentGroup.add(linkGroup);
 
             // Find all joints with this link as parent
-            const allJoints = Array.from(model.joints.values()) as any[];
+            const allJoints = Array.from(model.joints.values());
             const childJoints = allJoints.filter(
                 j => j.parent === linkName && j.child
             );
 
             // Process child joints and child bodies
-            childJoints.forEach((joint: any) => {
+            childJoints.forEach((joint) => {
                 const childLinkName = joint.child;
                 if (!childLinkName) return;
 
                 // Get child link's body origin (in MJCF, body.pos defines connection position)
                 const childLink = model.links.get(childLinkName);
-                const bodyOrigin = childLink.userData.bodyOrigin || { xyz: [0, 0, 0], rpy: [0, 0, 0] };
+                if (!childLink) {
+                    return;
+                }
+                const bodyOrigin = this.getStoredOrigin(childLink.userData.bodyOrigin);
 
                 // Create joint transformation group
-                const jointGroup: any = new THREE.Group();
+                const jointGroup = new THREE.Group() as MJCFSceneGroup;
                 jointGroup.name = joint.name || `joint_${childLinkName}`;
                 jointGroup.isURDFJoint = true; // Mark as joint for JointDragControls recognition
-                jointGroup.type = 'URDFJoint'; // Set type
                 jointGroup.jointType = joint.type; // Set joint type
 
                 // Store joint axis information (for JointDragControls use)
@@ -1833,7 +1936,7 @@ export class MJCFAdapter {
                 // Recursively build child link
                 buildHierarchy(childLinkName, jointGroup);
 
-                linkGroup.add(jointGroup);
+                parentGroup.add(jointGroup);
                 joint.threeObject = jointGroup;
             });
 
@@ -1841,14 +1944,17 @@ export class MJCFAdapter {
             for (const [childName, bodyData] of bodyMap.entries()) {
                 if (bodyData.parentName === linkName) {
                     // Check if joint connection already exists
-                    const allJoints2 = Array.from(model.joints.values()) as any[];
+                    const allJoints2 = Array.from(model.joints.values());
                     const hasJoint = allJoints2.some(
                         j => j.parent === linkName && j.child === childName
                     );
                     if (!hasJoint) {
                         // If no joint, create fixed connection group to apply body position and rotation
-                        const childLink: any = model.links.get(childName);
-                        const childBodyOrigin = childLink.userData.bodyOrigin || { xyz: [0, 0, 0], rpy: [0, 0, 0] };
+                        const childLink = model.links.get(childName);
+                        if (!childLink) {
+                            return;
+                        }
+                        const childBodyOrigin = this.getStoredOrigin(childLink.userData.bodyOrigin);
 
                         // Mark this as fixed-connected child body (for structure graph display)
                         childLink.userData.isFixedConnection = true;
@@ -1865,7 +1971,7 @@ export class MJCFAdapter {
                     }
                 }
             }
-        }
+        };
 
         // Start building from root link
         if (rootLinks.length > 0) {
@@ -1873,9 +1979,10 @@ export class MJCFAdapter {
                 // Root link needs to apply its own body.pos (because it has no parent joint)
                 const rootLink = model.links.get(rootName);
                 const rootLinkGroup = linkObjects.get(rootName);
-                if (rootLink.userData.bodyOrigin) {
-                    rootLinkGroup.position.set(...rootLink.userData.bodyOrigin.xyz);
-                    rootLinkGroup.rotation.set(...rootLink.userData.bodyOrigin.rpy);
+                if (rootLink && rootLinkGroup) {
+                    const rootOrigin = this.getStoredOrigin(rootLink.userData.bodyOrigin);
+                    rootLinkGroup.position.set(rootOrigin.xyz[0], rootOrigin.xyz[1], rootOrigin.xyz[2]);
+                    rootLinkGroup.rotation.set(rootOrigin.rpy[0], rootOrigin.rpy[1], rootOrigin.rpy[2]);
                 }
                 buildHierarchy(rootName, rootGroup);
             });
@@ -1884,9 +1991,10 @@ export class MJCFAdapter {
             const firstLink = Array.from(model.links.keys())[0];
             const firstLinkObj = model.links.get(firstLink);
             const firstLinkGroup = linkObjects.get(firstLink);
-            if (firstLinkObj.userData.bodyOrigin) {
-                firstLinkGroup.position.set(...firstLinkObj.userData.bodyOrigin.xyz);
-                firstLinkGroup.rotation.set(...firstLinkObj.userData.bodyOrigin.rpy);
+            if (firstLinkObj && firstLinkGroup) {
+                const firstOrigin = this.getStoredOrigin(firstLinkObj.userData.bodyOrigin);
+                firstLinkGroup.position.set(firstOrigin.xyz[0], firstOrigin.xyz[1], firstOrigin.xyz[2]);
+                firstLinkGroup.rotation.set(firstOrigin.rpy[0], firstOrigin.rpy[1], firstOrigin.rpy[2]);
             }
             buildHierarchy(firstLink, rootGroup);
         }
@@ -1908,8 +2016,12 @@ export class MJCFAdapter {
      * @param {Map} meshCache - Cache of loaded meshes (optional)
      * @returns {Promise<THREE.Mesh|null>}
      */
-    static async createGeometryMesh(geometry, fileMap = null, meshCache = null) {
-        let threeGeometry = null;
+    static async createGeometryMesh(
+        geometry: GeometryType,
+        fileMap: Map<string, File> | null = null,
+        meshCache: Map<string, THREE.BufferGeometry | THREE.Object3D | null> | null = null
+    ): Promise<THREE.Object3D | null> {
+        let threeGeometry: THREE.BufferGeometry | THREE.Object3D | null = null;
 
         switch (geometry.type) {
             case 'box':
@@ -1970,7 +2082,7 @@ export class MJCFAdapter {
             case 'mesh':
                 // Load mesh file
                 if (geometry.filename) {
-                    let cachedMesh = null;
+                    let cachedMesh: THREE.BufferGeometry | THREE.Object3D | null = null;
 
                     // If already cached, get it
                     if (meshCache && meshCache.has(geometry.filename)) {
@@ -1986,7 +2098,7 @@ export class MJCFAdapter {
 
                     // loadMeshFile may return Group/Scene (OBJ/DAE/GLTF) or BufferGeometry (STL)
                     // If Group/Scene, need to clone (because Three.js objects can only have one parent)
-                    if (cachedMesh.isGroup || cachedMesh.isObject3D) {
+                    if (cachedMesh instanceof THREE.Object3D) {
                         threeGeometry = cachedMesh.clone(true); // Deep clone (including materials)
 
                         // Apply mesh scale from MJCF class inheritance (e.g., scale="0.001 0.001 0.001")
@@ -2012,12 +2124,12 @@ export class MJCFAdapter {
                         return threeGeometry;
                     }
                     // If BufferGeometry (e.g., STL), create a mesh and apply scale
-                    if (geometry.meshScale) {
+                    if (cachedMesh instanceof THREE.BufferGeometry && geometry.meshScale) {
                         const [sx, sy, sz] = geometry.meshScale;
                         // Scale the geometry directly
                         threeGeometry = cachedMesh.clone();
                         threeGeometry.scale(sx, sy, sz);
-                    } else {
+                    } else if (cachedMesh instanceof THREE.BufferGeometry) {
                         threeGeometry = cachedMesh;
                     }
                 } else {
@@ -2042,13 +2154,16 @@ export class MJCFAdapter {
         // Save original properties for lighting toggle
         material.userData.originalShininess = 30;
         material.userData.originalSpecular = null; // New material, no original specular
+        if (!(threeGeometry instanceof THREE.BufferGeometry)) {
+            return threeGeometry;
+        }
         return new THREE.Mesh(threeGeometry, material);
     }
 
     /**
      * Load mesh file from fileMap (using universal loader)
      */
-    static async loadMeshFile(meshPath, fileMap) {
+    static async loadMeshFile(meshPath: string, fileMap: Map<string, File>): Promise<THREE.BufferGeometry | THREE.Object3D | null> {
         return loadMeshFile(meshPath, fileMap);
     }
 
@@ -2123,4 +2238,3 @@ export class MJCFAdapter {
         }
     }
 }
-

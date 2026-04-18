@@ -4,12 +4,24 @@
  */
 import * as THREE from 'three';
 import * as d3 from 'd3';
+import type { SceneManager } from '../renderer/SceneManager.js';
+import type { Joint, Link } from '../models/UnifiedRobotModel.js';
+
+type MeasurementTargetType = 'joint' | 'link';
+
+interface MeasurementSelectable {
+    name: string;
+    type: MeasurementTargetType;
+    threeObject?: THREE.Object3D | null;
+}
+
+type MeasurementSelection = MeasurementSelectable;
 
 export class MeasurementController {
-    sceneManager: any;
-    selectedObjects: any[];
+    sceneManager: SceneManager;
+    selectedObjects: MeasurementSelection[];
 
-    constructor(sceneManager: any) {
+    constructor(sceneManager: SceneManager) {
         this.sceneManager = sceneManager;
         this.selectedObjects = [];
     }
@@ -17,32 +29,36 @@ export class MeasurementController {
     /**
      * Handle measurement object selection
      */
-    handleSelection(object, element, type) {
+    handleSelection(object: Joint | Link | { name: string }, element: EventTarget | null, type: MeasurementTargetType): void {
         const index = this.selectedObjects.findIndex(obj => obj.name === object.name && obj.type === type);
 
         if (index >= 0) {
             // Deselect
             this.selectedObjects.splice(index, 1);
-            d3.select(element).classed('measurement-selected', false);
+            if (element instanceof Element) {
+                d3.select(element).classed('measurement-selected', false);
+            }
         } else {
             // Add selection
             if (this.selectedObjects.length >= 2) {
                 const firstObj = this.selectedObjects.shift();
-                const svg = d3.select('#model-graph-svg');
+                const svg = d3.select<SVGSVGElement, unknown>('#model-graph-svg');
 
-                if (firstObj.type === 'joint') {
+                if (firstObj?.type === 'joint') {
                     svg.selectAll('.graph-joint-group')
-                        .filter((d: any) => d.target?.data?.jointName === firstObj.name)
+                        .filter((d: unknown) => (d as { target?: { data?: { jointName?: string; }; }; })?.target?.data?.jointName === firstObj.name)
                         .classed('measurement-selected', false);
-                } else if (firstObj.type === 'link') {
+                } else if (firstObj?.type === 'link') {
                     svg.selectAll('.graph-node')
-                        .filter((d: any) => d.data?.data?.name === firstObj.name)
+                        .filter((d: unknown) => (d as { data?: { data?: { name?: string; }; }; })?.data?.data?.name === firstObj.name)
                         .classed('measurement-selected', false);
                 }
             }
 
-            this.selectedObjects.push({ ...object, type: type });
-            d3.select(element).classed('measurement-selected', true);
+            this.selectedObjects.push({ ...object, type });
+            if (element instanceof Element) {
+                d3.select(element).classed('measurement-selected', true);
+            }
         }
 
         // If 2 objects selected, show measurement result
@@ -58,10 +74,10 @@ export class MeasurementController {
     /**
      * Show measurement between two objects
      */
-    showMeasurement(obj1, obj2) {
+    showMeasurement(obj1: MeasurementSelection, obj2: MeasurementSelection): void {
         if (!this.sceneManager) return;
 
-        const getPosition = (obj) => {
+        const getPosition = (obj: MeasurementSelection): THREE.Vector3 => {
             const pos = new THREE.Vector3();
 
             if (obj.type === 'joint' && obj.threeObject) {
@@ -98,7 +114,7 @@ export class MeasurementController {
     /**
      * Update current measurement
      */
-    updateMeasurement() {
+    updateMeasurement(): void {
         if (this.selectedObjects.length === 2) {
             this.showMeasurement(this.selectedObjects[0], this.selectedObjects[1]);
         }
@@ -107,10 +123,10 @@ export class MeasurementController {
     /**
      * Clear measurement
      */
-    clearMeasurement() {
+    clearMeasurement(): void {
         this.selectedObjects = [];
 
-        const svg = d3.select('#model-graph-svg');
+        const svg = d3.select<SVGSVGElement, unknown>('#model-graph-svg');
         svg.selectAll('.graph-node').classed('measurement-selected', false);
         svg.selectAll('.graph-joint-group').classed('measurement-selected', false);
 
@@ -122,8 +138,7 @@ export class MeasurementController {
     /**
      * Get selected objects
      */
-    getSelectedObjects() {
+    getSelectedObjects(): MeasurementSelection[] {
         return this.selectedObjects;
     }
 }
-

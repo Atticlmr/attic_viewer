@@ -4,29 +4,56 @@
  */
 import * as THREE from 'three';
 
+interface OrbitLikeControls {
+    enabled: boolean;
+}
+
+interface PhysicsRenderable extends THREE.Object3D {
+    bodyID?: number;
+}
+
+type HighlightState = {
+    color: THREE.Color;
+    intensity: number;
+};
+
+function setMaterialTransparency(material: THREE.Material | THREE.Material[], opacity: number): void {
+    const materials = Array.isArray(material) ? material : [material];
+    materials.forEach((entry) => {
+        entry.transparent = true;
+        entry.opacity = opacity;
+    });
+}
+
 export class DragStateManager {
-    scene: any;
-    renderer: any;
-    camera: any;
-    mousePos: any;
-    raycaster: any;
+    scene: THREE.Scene;
+    renderer: THREE.WebGLRenderer;
+    camera: THREE.Camera;
+    mousePos: THREE.Vector2;
+    raycaster: THREE.Raycaster;
     grabDistance: number;
     active: boolean;
-    physicsObject: any;
-    controls: any;
-    arrow: any;
-    previouslySelected: any;
+    physicsObject: PhysicsRenderable | null;
+    controls: OrbitLikeControls;
+    arrow: THREE.ArrowHelper;
+    previouslySelected: PhysicsRenderable | null;
     highlightColor: number;
-    originalEmissive: any;
-    localHit: any;
-    worldHit: any;
-    currentWorld: any;
+    originalEmissive: Map<string, HighlightState>;
+    localHit: THREE.Vector3;
+    worldHit: THREE.Vector3;
+    currentWorld: THREE.Vector3;
     enabled: boolean;
-    container: any;
-    boundOnPointer: any;
+    container: HTMLElement;
+    boundOnPointer: (evt: PointerEvent) => void;
     mouseDown: boolean;
 
-    constructor(scene: any, renderer: any, camera: any, container: any, controls: any) {
+    constructor(
+        scene: THREE.Scene,
+        renderer: THREE.WebGLRenderer,
+        camera: THREE.Camera,
+        container: HTMLElement,
+        controls: OrbitLikeControls
+    ) {
         this.scene = scene;
         this.renderer = renderer;
         this.camera = camera;
@@ -47,10 +74,8 @@ export class DragStateManager {
         );
         this.arrow.setLength(15, 3, 1);
         this.scene.add(this.arrow);
-        this.arrow.line.material.transparent = true;
-        this.arrow.cone.material.transparent = true;
-        this.arrow.line.material.opacity = 0.5;
-        this.arrow.cone.material.opacity = 0.5;
+        setMaterialTransparency(this.arrow.line.material, 0.5);
+        setMaterialTransparency(this.arrow.cone.material, 0.5);
         this.arrow.visible = false;
 
         this.previouslySelected = null;
@@ -92,20 +117,20 @@ export class DragStateManager {
         }
     }
 
-    updateRaycaster(x, y) {
+    updateRaycaster(x: number, y: number): void {
         const rect = this.renderer.domElement.getBoundingClientRect();
         this.mousePos.x = ((x - rect.left) / rect.width) * 2 - 1;
         this.mousePos.y = -((y - rect.top) / rect.height) * 2 + 1;
         this.raycaster.setFromCamera(this.mousePos, this.camera);
     }
 
-    start(x, y) {
+    start(x: number, y: number): void {
         this.physicsObject = null;
         this.updateRaycaster(x, y);
         const intersects = this.raycaster.intersectObjects(this.scene.children, true);
 
         for (let i = 0; i < intersects.length; i++) {
-            const obj = intersects[i].object;
+            const obj = intersects[i].object as PhysicsRenderable;
             if (obj.bodyID !== undefined && obj.bodyID > 0) {
                 this.physicsObject = obj;
                 this.grabDistance = intersects[i].distance;
@@ -126,7 +151,7 @@ export class DragStateManager {
         }
     }
 
-    move(x, y) {
+    move(x: number, y: number): void {
         if (this.active) {
             this.updateRaycaster(x, y);
             const hit = this.raycaster.ray.origin.clone();
@@ -136,7 +161,7 @@ export class DragStateManager {
         }
     }
 
-    update() {
+    update(): void {
         if (this.worldHit && this.localHit && this.currentWorld && this.arrow && this.physicsObject) {
             this.worldHit.copy(this.localHit);
             this.physicsObject.localToWorld(this.worldHit);
@@ -146,7 +171,7 @@ export class DragStateManager {
         }
     }
 
-    end() {
+    end(): void {
         // Remove highlight
         if (this.physicsObject) {
             this.unhighlightBody(this.physicsObject);
@@ -162,10 +187,10 @@ export class DragStateManager {
     /**
      * Highlight entire body group
      */
-    highlightBody(obj) {
+    highlightBody(obj: PhysicsRenderable): void {
         // Find body group (parent Group containing bodyID)
-        let bodyGroup = obj;
-        while (bodyGroup && !bodyGroup.isGroup) {
+        let bodyGroup: THREE.Object3D | null = obj;
+        while (bodyGroup && !(bodyGroup instanceof THREE.Group)) {
             bodyGroup = bodyGroup.parent;
         }
 
@@ -173,21 +198,23 @@ export class DragStateManager {
 
         // Traverse all meshes in body group and highlight
         bodyGroup.traverse((child) => {
-            if (child.isMesh && child.material) {
-                // Only process materials with emissive property (e.g., MeshPhongMaterial, MeshStandardMaterial)
-                if (child.material.emissive) {
-                    // Save original emissive
-                    if (!this.originalEmissive.has(child.uuid)) {
-                        this.originalEmissive.set(child.uuid, {
-                            color: child.material.emissive.clone(),
-                            intensity: child.material.emissiveIntensity || 0
-                        });
-                    }
+            if (!(child instanceof THREE.Mesh) || !child.material || Array.isArray(child.material)) {
+                return;
+            }
 
-                    // Apply highlight
-                    child.material.emissive.setHex(this.highlightColor);
-                    child.material.emissiveIntensity = 0.5;
+            const material = child.material;
+
+            if (material.emissive) {
+                // Only process materials with emissive property (e.g., MeshPhongMaterial, MeshStandardMaterial)
+                if (!this.originalEmissive.has(child.uuid)) {
+                    this.originalEmissive.set(child.uuid, {
+                        color: material.emissive.clone(),
+                        intensity: material.emissiveIntensity || 0
+                    });
                 }
+
+                material.emissive.setHex(this.highlightColor);
+                material.emissiveIntensity = 0.5;
             }
         });
     }
@@ -195,10 +222,10 @@ export class DragStateManager {
     /**
      * Remove highlight from body group
      */
-    unhighlightBody(obj) {
+    unhighlightBody(obj: PhysicsRenderable): void {
         // Find body group
-        let bodyGroup = obj;
-        while (bodyGroup && !bodyGroup.isGroup) {
+        let bodyGroup: THREE.Object3D | null = obj;
+        while (bodyGroup && !(bodyGroup instanceof THREE.Group)) {
             bodyGroup = bodyGroup.parent;
         }
 
@@ -206,18 +233,22 @@ export class DragStateManager {
 
         // Restore original materials
         bodyGroup.traverse((child) => {
-            if (child.isMesh && child.material && this.originalEmissive.has(child.uuid)) {
-                const original = this.originalEmissive.get(child.uuid);
-                if (child.material.emissive) {
-                    child.material.emissive.copy(original.color);
-                    child.material.emissiveIntensity = original.intensity;
-                }
-                this.originalEmissive.delete(child.uuid);
+            if (!(child instanceof THREE.Mesh) || !child.material || Array.isArray(child.material)) {
+                return;
             }
+
+            const original = this.originalEmissive.get(child.uuid);
+            if (!original || !child.material.emissive) {
+                return;
+            }
+
+            child.material.emissive.copy(original.color);
+            child.material.emissiveIntensity = original.intensity;
+            this.originalEmissive.delete(child.uuid);
         });
     }
 
-    onPointer(evt) {
+    onPointer(evt: PointerEvent): void {
         if (!this.enabled) return;
 
         if (evt.type === 'pointerdown') {
@@ -232,4 +263,3 @@ export class DragStateManager {
         }
     }
 }
-

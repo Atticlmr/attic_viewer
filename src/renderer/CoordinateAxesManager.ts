@@ -1,16 +1,25 @@
 import * as THREE from 'three';
+import type { SceneManager } from './SceneManager.js';
+import type { Joint, Link } from '../models/UnifiedRobotModel.js';
+
+interface JointAxisInfo {
+    mesh: THREE.Group;
+    parent: THREE.Object3D;
+    joint: Joint;
+    isAttached: boolean;
+}
 
 /**
  * CoordinateAxesManager - Handles link coordinate axes and joint axes visualization
  */
 export class CoordinateAxesManager {
-    sceneManager: any;
-    linkAxesHelpers: any;
-    jointAxesHelpers: any;
+    sceneManager: SceneManager;
+    linkAxesHelpers: Map<string, THREE.Group>;
+    jointAxesHelpers: Map<string, JointAxisInfo>;
     showAxesEnabled: boolean;
     showJointAxesEnabled: boolean;
 
-    constructor(sceneManager: any) {
+    constructor(sceneManager: SceneManager) {
         this.sceneManager = sceneManager;
         this.linkAxesHelpers = new Map();
         this.jointAxesHelpers = new Map();
@@ -23,7 +32,7 @@ export class CoordinateAxesManager {
      * @param {number} axesSize - Length of axes
      * @returns {THREE.Group} Axes group
      */
-    static createAxesGeometry(axesSize) {
+    static createAxesGeometry(axesSize: number): THREE.Group {
         const axesGroup = new THREE.Group();
         const axisRadius = Math.max(0.001, axesSize * 0.015);
         const axisGeometry = new THREE.CylinderGeometry(axisRadius, axisRadius, axesSize, 8);
@@ -65,7 +74,7 @@ export class CoordinateAxesManager {
      * @param {THREE.Vector3} axisDirection - Direction of joint axis
      * @returns {THREE.Group} Arrow group with rotation indicator
      */
-    static createJointArrowGeometry(axisDirection) {
+    static createJointArrowGeometry(axisDirection: THREE.Vector3): THREE.Group {
         const arrowLength = 0.2;
         const shaftLength = arrowLength * 0.7;
         const headLength = arrowLength * 0.3;
@@ -107,7 +116,7 @@ export class CoordinateAxesManager {
      * @param {number} baseLength - Length of the arrow for sizing
      * @returns {THREE.Group} Rotation indicator group
      */
-    static createRotationIndicator(axisDirection, baseLength) {
+    static createRotationIndicator(axisDirection: THREE.Vector3, baseLength: number): THREE.Group {
         const group = new THREE.Group();
         const radius = baseLength * 0.25;
         const tubeRadius = 0.002;
@@ -164,7 +173,7 @@ export class CoordinateAxesManager {
     /**
      * Create coordinate axes for a link
      */
-    createLinkAxes(link, linkName, modelSize = 1.0) {
+    createLinkAxes(link: Link, linkName: string, modelSize = 1.0): THREE.Group {
         // Calculate actual size of current link
         let linkSize = modelSize; // Default use entire model size
 
@@ -249,7 +258,7 @@ export class CoordinateAxesManager {
     /**
      * Create joint axis visualization (large red arrow)
      */
-    createJointAxis(joint, jointName) {
+    createJointAxis(joint: Joint, jointName: string): THREE.Group | null {
         if (!joint.threeObject || (joint.type !== 'revolute' && joint.type !== 'continuous')) {
             return null; // Only create axis for revolute joints
         }
@@ -264,8 +273,9 @@ export class CoordinateAxesManager {
         let localAxisDirection = new THREE.Vector3(0, 0, 1); // Default Z axis
 
         // Prefer getting axis from urdf-loader's joint object
-        if (jointObject.axis) {
-            localAxisDirection.copy(jointObject.axis).normalize();
+        const axisObject = jointObject as THREE.Object3D & { axis?: THREE.Vector3; };
+        if (axisObject.axis) {
+            localAxisDirection.copy(axisObject.axis).normalize();
         } else if (joint.axis && joint.axis.xyz) {
             localAxisDirection.set(
                 joint.axis.xyz[0] || 0,
@@ -332,7 +342,7 @@ export class CoordinateAxesManager {
     /**
      * Create rotation direction indicator (arc arrow)
      */
-    createRotationIndicator(axisDirection, baseLength) {
+    createRotationIndicator(axisDirection: THREE.Vector3, baseLength: number): THREE.Group {
         const group = new THREE.Group();
         const radius = baseLength * 0.25; // Arc radius (reduced, closer to axis)
         const tubeRadius = 0.002; // Arc line thickness (thinner)
@@ -399,7 +409,7 @@ export class CoordinateAxesManager {
     /**
      * Show all link axes
      */
-    showAllAxes() {
+    showAllAxes(): void {
         this.showAxesEnabled = true;
 
         // Show all link axes
@@ -410,7 +420,7 @@ export class CoordinateAxesManager {
     /**
      * Hide all link axes
      */
-    hideAllAxes() {
+    hideAllAxes(): void {
         this.showAxesEnabled = false;
 
         // Hide all link axes
@@ -421,7 +431,7 @@ export class CoordinateAxesManager {
     /**
      * Show all joint axes
      */
-    showAllJointAxes() {
+    showAllJointAxes(): void {
         this.showJointAxesEnabled = true;
 
         // Show all joint axes (add to scene)
@@ -435,7 +445,7 @@ export class CoordinateAxesManager {
     /**
      * Hide all joint axes
      */
-    hideAllJointAxes() {
+    hideAllJointAxes(): void {
         this.showJointAxesEnabled = false;
 
         // Hide all joint axes (remove from scene)
@@ -449,7 +459,7 @@ export class CoordinateAxesManager {
     /**
      * Temporarily show only specified joint axis (for slider drag/model drag)
      */
-    showOnlyJointAxis(joint) {
+    showOnlyJointAxis(joint: Joint): void {
         // Hide all joint axes
         this.jointAxesHelpers.forEach((axisInfo, jointName) => {
             if (axisInfo.isAttached && axisInfo.parent) {
@@ -472,7 +482,7 @@ export class CoordinateAxesManager {
     /**
      * Restore all joint axes display (called after slider drag ends)
      */
-    restoreAllJointAxes() {
+    restoreAllJointAxes(): void {
         // Hide all joint axes
         this.jointAxesHelpers.forEach((axisInfo, jointName) => {
             if (axisInfo.isAttached && axisInfo.parent) {
@@ -495,11 +505,11 @@ export class CoordinateAxesManager {
     /**
      * Ensure axes don't cast shadows
      */
-    ensureAxesNoShadow() {
+    ensureAxesNoShadow(): void {
         // Ensure link axes don't cast shadows
         this.linkAxesHelpers.forEach((axes) => {
             axes.traverse((child) => {
-                if (child.isMesh) {
+                if (child instanceof THREE.Mesh) {
                     child.castShadow = false;
                     child.receiveShadow = false;
                 }
@@ -509,7 +519,7 @@ export class CoordinateAxesManager {
         // Ensure joint axes don't cast shadows
         this.jointAxesHelpers.forEach((axisInfo) => {
             axisInfo.mesh.traverse((child) => {
-                if (child.isMesh) {
+                if (child instanceof THREE.Mesh) {
                     child.castShadow = false;
                     child.receiveShadow = false;
                 }
@@ -549,4 +559,3 @@ export class CoordinateAxesManager {
         this.clearAllJointAxes();
     }
 }
-

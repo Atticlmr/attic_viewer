@@ -1,20 +1,22 @@
 import * as THREE from 'three';
+import type { SceneManager } from './SceneManager.js';
+import type { ViewerModel } from '../types/app.js';
 
 /**
  * VisualizationManager - Handles visual and collision mesh extraction and visibility
  */
 export class VisualizationManager {
-    sceneManager: any;
-    visualMeshes: any[];
-    collisionMeshes: any[];
-    colliders: any[];
-    hiddenLinks: any;
+    sceneManager: SceneManager;
+    visualMeshes: THREE.Object3D[];
+    collisionMeshes: THREE.Object3D[];
+    colliders: THREE.Object3D[];
+    hiddenLinks: Set<string>;
     showVisual: boolean;
     showCollision: boolean;
     showShadow: boolean;
     showEnhancedLighting: boolean;
 
-    constructor(sceneManager: any) {
+    constructor(sceneManager: SceneManager) {
         this.sceneManager = sceneManager;
         this.visualMeshes = [];
         this.collisionMeshes = [];
@@ -31,7 +33,7 @@ export class VisualizationManager {
     /**
      * Extract visual and collision meshes from model
      */
-    extractVisualAndCollision(model) {
+    extractVisualAndCollision(model: ViewerModel): void {
         // Clear arrays only on first call to avoid duplicates on subsequent async calls
         const isFirstCall = this.visualMeshes.length === 0;
         if (!isFirstCall) {
@@ -206,7 +208,7 @@ export class VisualizationManager {
     /**
      * Process newly loaded meshes (for subsequent async calls)
      */
-    processNewlyLoadedMeshes(model) {
+    processNewlyLoadedMeshes(model: ViewerModel): void {
         if (!model.threeObject) return;
 
         // First pass: Process materials for visual meshes only (skip collision meshes)
@@ -654,7 +656,7 @@ export class VisualizationManager {
         const mujocoManager = window.app?.mujocoSimulationManager;
         if (mujocoManager && mujocoManager.mujocoRoot) {
             mujocoManager.mujocoRoot.traverse((child) => {
-                if (child.isMesh && child.material) {
+                if (child instanceof THREE.Mesh && child.material) {
                     const materials = Array.isArray(child.material) ? child.material : [child.material];
 
                     materials.forEach(material => {
@@ -900,4 +902,3 @@ export class VisualizationManager {
         this.hiddenLinks.clear();
     }
 }
-
