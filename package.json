@@ -38,6 +38,7 @@
     "@uiw/codemirror-theme-vscode": "^4.21.21",
     "codemirror": "^6.0.1",
     "d3": "^7.9.0",
+    "jszip": "^3.10.1",
     "mujoco-js": "^0.0.7",
     "three": "^0.163.0",
     "urdf-loader": "^0.12.5",
