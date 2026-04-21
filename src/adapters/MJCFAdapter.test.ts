@@ -195,7 +195,7 @@ describe('MJCFAdapter', () => {
         const base = model.links.get('base');
         const joint = model.joints.get('hinge1');
 
-        expect(base?.userData?.bodyOrigin?.rpy?.[0]).toBeCloseTo(Math.PI / 2);
+        expect((base?.userData?.bodyOrigin as any)?.rpy?.[0]).toBeCloseTo(Math.PI / 2);
         expect(joint?.limits?.lower).toBeCloseTo(-Math.PI / 2);
         expect(joint?.limits?.upper).toBeCloseTo(Math.PI / 4);
     });
@@ -221,7 +221,7 @@ describe('MJCFAdapter', () => {
         const base = model.links.get('base');
         const joint = model.joints.get('hinge1');
 
-        expect(base?.userData?.bodyOrigin?.rpy?.[0]).toBeCloseTo(1.57079632679);
+        expect((base?.userData?.bodyOrigin as any)?.rpy?.[0]).toBeCloseTo(1.57079632679);
         expect(joint?.limits?.lower).toBeCloseTo(-1.57079632679);
         expect(joint?.limits?.upper).toBeCloseTo(0.78539816339);
     });

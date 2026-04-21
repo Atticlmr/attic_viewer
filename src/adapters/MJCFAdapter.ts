@@ -552,7 +552,7 @@ export class MJCFAdapter {
         if (worldbodyGeoms.length > 0) {
             const worldbodyLink = new Link('worldbody');
             worldbodyLink.userData.isWorldbody = true;
-            const seenMeshes = new Set();
+            const seenMeshes = new Set<string>();
             const worldbodyChildClass = worldbody.getAttribute('childclass');
 
             worldbodyGeoms.forEach((geomEl, geomIndex) => {
@@ -1026,7 +1026,7 @@ export class MJCFAdapter {
 
             // Parse geometries (geom)
             const geoms = bodyEl.querySelectorAll(':scope > geom');
-            const seenMeshes = new Set(); // Track added meshes to avoid duplicates
+            const seenMeshes = new Set<string>(); // Track added meshes to avoid duplicates
 
             geoms.forEach((geomEl, geomIndex) => {
                 stats.totalGeoms++;
