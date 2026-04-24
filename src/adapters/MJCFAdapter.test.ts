@@ -291,4 +291,34 @@ describe('MJCFAdapter', () => {
         expect(rotatedZ[1]).toBeCloseTo(0, 4);
         expect(rotatedZ[2]).toBeCloseTo(0, 4);
     });
+
+    it('binds joints inside anonymous child bodies to generated link names', async () => {
+        const xml = `<?xml version="1.0"?>
+<mujoco model="anonymous_joint_child">
+  <worldbody>
+    <body name="torso">
+      <body name="aux_1">
+        <joint name="hip_1" type="hinge" axis="0 0 1" />
+        <body pos="0.2 0.2 0">
+          <joint name="ankle_1" type="hinge" axis="-1 1 0" />
+          <geom name="left_foot_geom" type="sphere" size="0.05" rgba="0.8 0.6 0.4 1" />
+        </body>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>`;
+
+        const createThreeObjectSpy = vi.spyOn(MJCFAdapter, 'createThreeObject').mockResolvedValue(undefined);
+        const model = await MJCFAdapter.parse(xml, null, null);
+        createThreeObjectSpy.mockRestore();
+
+        const ankleJoint = model.joints.get('ankle_1');
+        const anonymousLinkName = ankleJoint?.child || '';
+        const anonymousLink = model.links.get(anonymousLinkName);
+
+        expect(ankleJoint?.parent).toBe('aux_1');
+        expect(anonymousLinkName).toMatch(/^body_\d+$/);
+        expect(anonymousLink).toBeDefined();
+        expect(anonymousLink?.visuals).toHaveLength(1);
+    });
 });

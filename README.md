@@ -8,7 +8,7 @@
 
 # Attic Viewer
 
-[![Version](https://img.shields.io/badge/version-v1.3.0-blue.svg)](https://github.com/Atticlmr/attic_viewer)
+[![Version](https://img.shields.io/badge/version-v1.3.2-blue.svg)](https://github.com/Atticlmr/attic_viewer)
 [![License](https://img.shields.io/badge/license-Apache--2.0-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-web-orange.svg)](https://github.com/Atticlmr/attic_viewer)
 [![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6.svg)](https://github.com/Atticlmr/attic_viewer)

@@ -50,6 +50,11 @@ interface MJCFDefaults {
 type MJCFStoredOrigin = Origin;
 type MJCFQuaternion = [number, number, number, number];
 type MJCFAngleUnit = 'degree' | 'radian';
+type MJCFBodyRecord = {
+    link: Link;
+    element: Element;
+    parentName: string | null;
+};
 type MJCFSceneGroup = THREE.Group & {
     isURDFLink?: boolean;
     isURDFJoint?: boolean;
@@ -154,6 +159,25 @@ export class MJCFAdapter {
         // For plain MJCF size-based primitives we rotate them to Z.
         // Geoms using fromto already compute an explicit rotation from Y to target direction.
         return !geometry.fromto;
+    }
+
+    static getBodyLinkName(bodyMap: Map<string, MJCFBodyRecord>, bodyEl: Element | null): string | null {
+        if (!bodyEl) {
+            return null;
+        }
+
+        const explicitName = bodyEl.getAttribute('name');
+        if (explicitName) {
+            return explicitName;
+        }
+
+        for (const [linkName, bodyData] of bodyMap.entries()) {
+            if (bodyData.element === bodyEl) {
+                return linkName;
+            }
+        }
+
+        return null;
     }
 
     static parseAngleUnit(doc: Document): MJCFAngleUnit {
@@ -619,7 +643,7 @@ export class MJCFAdapter {
         }
 
         // Parse all bodies (links), pass meshMap, materialMap, classDefaults and rootDefaults
-        const bodyMap = new Map();
+        const bodyMap = new Map<string, MJCFBodyRecord>();
         this.parseBodies(worldbody, null, bodyMap, model, null, meshMap, null, materialMap, classDefaults, rootDefaults, null, angleUnit);
 
         // Parse all joints
@@ -1002,7 +1026,7 @@ export class MJCFAdapter {
     /**
      * Recursively parse body elements, record parent-child relationships
      */
-    static parseBodies(element, parentName, bodyMap, model, parentLinkRef = null, meshMap = null, stats = null, materialMap = null, classDefaults = null, rootDefaults = null, inheritedChildClass = null, angleUnit: MJCFAngleUnit = 'degree') {
+    static parseBodies(element, parentName, bodyMap: Map<string, MJCFBodyRecord>, model, parentLinkRef = null, meshMap = null, stats = null, materialMap = null, classDefaults = null, rootDefaults = null, inheritedChildClass = null, angleUnit: MJCFAngleUnit = 'degree') {
         // Initialize stats object (only on root call)
         if (!stats) {
             stats = { totalGeoms: 0, skippedCollisionGeoms: 0, visualGeoms: 0 };
@@ -1590,7 +1614,7 @@ export class MJCFAdapter {
     /**
      * Parse joint element
      */
-    static parseJoints(element, bodyMap, model, parentBodyName = null, defaultsMap = null, angleUnit: MJCFAngleUnit = 'degree') {
+    static parseJoints(element, bodyMap: Map<string, MJCFBodyRecord>, model, parentBodyName = null, defaultsMap = null, angleUnit: MJCFAngleUnit = 'degree') {
         const joints = element.querySelectorAll(':scope > joint');
 
         joints.forEach(jointEl => {
@@ -1635,7 +1659,7 @@ export class MJCFAdapter {
             // [Critical fix] In MJCF, joint is defined inside body, representing the connection relationship between this body and its parent body
             // So: parent is parent body, child is current body
             const currentBody = jointEl.parentElement;
-            const currentBodyName = currentBody.getAttribute('name');
+            const currentBodyName = this.getBodyLinkName(bodyMap, currentBody);
 
             // parent is the passed parent body name (or worldbody)
             if (parentBodyName) {
@@ -1666,7 +1690,7 @@ export class MJCFAdapter {
 
                 // If joint has no class, check parent body's childclass
                 if (!className) {
-                    className = currentBody.getAttribute('childclass');
+                    className = currentBody?.getAttribute('childclass');
                 }
 
                 if (className && defaultsMap) {
@@ -1701,7 +1725,7 @@ export class MJCFAdapter {
 
                 // If joint has no class, check parent body's childclass
                 if (!className) {
-                    className = currentBody.getAttribute('childclass');
+                    className = currentBody?.getAttribute('childclass');
                 }
 
                 if (className && defaultsMap) {
@@ -1739,7 +1763,7 @@ export class MJCFAdapter {
             
             // Get parent body
             const currentBody = freejointEl.parentElement;
-            const currentBodyName = currentBody.getAttribute('name');
+            const currentBodyName = this.getBodyLinkName(bodyMap, currentBody);
             
             // Parent is worldbody for freejoints
             if (parentBodyName) {
@@ -1762,7 +1786,7 @@ export class MJCFAdapter {
         // Recursively process child bodies
         // Find direct child bodies (use :scope > body to ensure only direct children are selected)
         const bodies = element.querySelectorAll(':scope > body');
-        const currentElementName = element.getAttribute('name'); // Name of current body or worldbody
+        const currentElementName = this.getBodyLinkName(bodyMap, element); // Name of current body or generated anonymous link
 
         bodies.forEach(body => {
             // Child body's parent body name is current element's name
