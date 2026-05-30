@@ -1,6 +1,6 @@
 # Dependencies
 node_modules/
-
+.codegraph/
 # Build output
 dist/
 build/
@@ -27,4 +27,3 @@ Thumbs.db
 
 # Cache
 .cache/
-

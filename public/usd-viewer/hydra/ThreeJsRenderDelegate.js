@@ -7,6 +7,17 @@ import {
 } from "./HydraPrimitives.js";
 
 const DEBUG_PRIMS = false;
+const lightSPrimTypes = new Set([
+  "cylinderlight",
+  "disklight",
+  "distantlight",
+  "domelight",
+  "geometrylight",
+  "portallight",
+  "rectlight",
+  "simplelight",
+  "spherelight",
+]);
 
 // Used by the driver to create the delegate
 export class ThreeRenderDelegateInterface {
@@ -28,9 +39,9 @@ export class ThreeRenderDelegateInterface {
    * @param {*} instancerId
    * @returns
    */
-  createRPrim(typeId, id) {
+  createRPrim(typeId, id, instancerId = null) {
     if (DEBUG_PRIMS) console.log("Creating RPrim:", typeId, id);
-    const mesh = new HydraMesh(id, this);
+    const mesh = new HydraMesh(id, this, instancerId);
     this.meshes[id] = mesh;
     return mesh;
   }
@@ -51,7 +62,7 @@ export class ThreeRenderDelegateInterface {
     if (t === "camera") {
       return new HydraCamera(id, this);
     }
-    if (t.includes("light")) {
+    if (lightSPrimTypes.has(t)) {
       return new HydraLight(id, this);
     }
   }

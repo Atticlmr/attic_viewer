@@ -189,7 +189,10 @@ export class App {
                 if (loadableFiles.length > 0) {
                     this.fileHandler.availableModels = loadableFiles;
                     this.fileHandler.onFilesLoaded?.(loadableFiles);
-                    await this.fileHandler.loadFileOrMesh(loadableFiles[0]);
+                    const defaultFile = this.fileHandler.getDefaultLoadableFile(loadableFiles);
+                    if (defaultFile) {
+                        await this.fileHandler.loadFileOrMesh(defaultFile);
+                    }
                 }
             };
 

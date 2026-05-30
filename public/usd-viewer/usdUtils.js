@@ -41,15 +41,18 @@ export async function getFileFromHandle(fileOrHandle) {
 
 export function parseFilePath(fullPath, defaultName) {
   if (!fullPath) return { fileName: defaultName, directory: "/" };
-  const fileName = fullPath.split("/").pop();
-  const directory = fullPath.substring(0, fullPath.length - fileName.length);
+  const normalizedPath = fullPath.replace(/\/+$/, "");
+  if (!normalizedPath) return { fileName: defaultName, directory: "/" };
+  const fileName = normalizedPath.split("/").pop();
+  if (!fileName) return { fileName: defaultName, directory: "/" };
+  const directory = normalizedPath.substring(0, normalizedPath.length - fileName.length) || "/";
   return { fileName, directory };
 }
 
 export function safeCall(obj, method, ...args) {
   try {
     if (obj && typeof obj[method] === "function") {
-      return obj[method](...args);
+      return obj[method].call(obj, ...args);
     }
   } catch {}
   return null;

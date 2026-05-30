@@ -36,6 +36,14 @@ export class UIController {
         this.angleUnit = 'rad';
     }
 
+    private isUSDModel(): boolean {
+        return Boolean(this.sceneManager?.currentModel?.userData?.isUSDWASM);
+    }
+
+    private updateUSDDisplayOptions(options: Record<string, boolean>): void {
+        window.app?.usdViewerManager?.setDisplayOptions?.(options);
+    }
+
     /**
      * Setup control panel events
      */
@@ -88,6 +96,10 @@ export class UIController {
         if (showVisualBtn) {
             showVisualBtn.addEventListener('click', () => {
                 toggleButton(showVisualBtn, (newState) => {
+                    if (this.isUSDModel()) {
+                        this.updateUSDDisplayOptions({ visual: newState });
+                        return;
+                    }
                     this.sceneManager.visualizationManager.toggleVisual(newState, this.sceneManager.currentModel);
 
                     // If MuJoCo simulation is running, also toggle its visual display
@@ -105,6 +117,10 @@ export class UIController {
         if (showCollisionBtn) {
             showCollisionBtn.addEventListener('click', () => {
                 toggleButton(showCollisionBtn, (newState) => {
+                    if (this.isUSDModel()) {
+                        this.updateUSDDisplayOptions({ collision: newState });
+                        return;
+                    }
                     this.sceneManager.visualizationManager.toggleCollision(newState);
 
                     // If MuJoCo simulation is running, also toggle its collision display
@@ -122,6 +138,10 @@ export class UIController {
         if (showComBtn) {
             showComBtn.addEventListener('click', () => {
                 toggleButton(showComBtn, (newState) => {
+                    if (this.isUSDModel()) {
+                        this.updateUSDDisplayOptions({ com: newState });
+                        return;
+                    }
                     this.sceneManager.inertialVisualization.toggleCenterOfMass(newState, this.sceneManager.currentModel);
 
                     // If MuJoCo simulation is running, also toggle its COM display
@@ -140,6 +160,10 @@ export class UIController {
         if (showInertiaBtn) {
             showInertiaBtn.addEventListener('click', () => {
                 toggleButton(showInertiaBtn, (newState) => {
+                    if (this.isUSDModel()) {
+                        this.updateUSDDisplayOptions({ inertia: newState });
+                        return;
+                    }
                     this.sceneManager.inertialVisualization.toggleInertia(newState, this.sceneManager.currentModel);
 
                     // If MuJoCo simulation is running, also toggle its inertia display
@@ -408,6 +432,10 @@ export class UIController {
             axesBtn.setAttribute('data-checked', newState.toString());
             if (newState) {
                 axesBtn.classList.add('active');
+                if (this.isUSDModel()) {
+                    this.updateUSDDisplayOptions({ axes: true });
+                    return;
+                }
                 this.sceneManager.axesManager.showAllAxes();
 
                 // If MuJoCo simulation is running, also show its axes
@@ -420,6 +448,10 @@ export class UIController {
                 this.sceneManager.redraw();
             } else {
                 axesBtn.classList.remove('active');
+                if (this.isUSDModel()) {
+                    this.updateUSDDisplayOptions({ axes: false });
+                    return;
+                }
                 this.sceneManager.axesManager.hideAllAxes();
 
                 // If MuJoCo simulation is running, also hide its axes
@@ -450,6 +482,10 @@ export class UIController {
             jointAxesBtn.setAttribute('data-checked', newState.toString());
             if (newState) {
                 jointAxesBtn.classList.add('active');
+                if (this.isUSDModel()) {
+                    this.updateUSDDisplayOptions({ jointAxes: true });
+                    return;
+                }
                 this.sceneManager.axesManager.showAllJointAxes();
 
                 // If MuJoCo simulation is running, also show its joint axes
@@ -462,6 +498,10 @@ export class UIController {
                 this.sceneManager.redraw();
             } else {
                 jointAxesBtn.classList.remove('active');
+                if (this.isUSDModel()) {
+                    this.updateUSDDisplayOptions({ jointAxes: false });
+                    return;
+                }
                 this.sceneManager.axesManager.hideAllJointAxes();
 
                 // If MuJoCo simulation is running, also hide its joint axes

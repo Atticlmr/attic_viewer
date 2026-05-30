@@ -53,6 +53,69 @@ export class FileHandler {
     }
 
     /**
+     * Normalize FileSystemEntry paths without duplicating recursive base paths.
+     */
+    normalizeEntryPath(entry: FileSystemEntryLike, basePath = ''): string {
+        const entryPath = (entry.fullPath || entry.name).replace(/\\/g, '/').replace(/^\/+/, '');
+        if (entry.fullPath) {
+            return entryPath;
+        }
+
+        return basePath
+            ? `${basePath.replace(/\/+$/, '')}/${entryPath}`
+            : entryPath;
+    }
+
+    /**
+     * Pick the most likely root model when a folder contains multiple loadable files.
+     */
+    getDefaultLoadableFile(loadableFiles: LoadableFileInfo[]): LoadableFileInfo | null {
+        if (loadableFiles.length === 0) {
+            return null;
+        }
+
+        const score = (fileInfo: LoadableFileInfo): number => {
+            const path = fileInfo.path.replace(/\\/g, '/').toLowerCase();
+            const name = fileInfo.name.toLowerCase();
+            let value = 0;
+
+            if (fileInfo.category === 'model') value += 1000;
+            if (['urdf', 'xacro', 'mjcf'].includes(fileInfo.type)) value += 300;
+            if (fileInfo.type === 'usd') value += 200;
+            if (fileInfo.category === 'mesh') value += 50;
+
+            if (['urdf', 'xacro', 'xml', 'usda', 'usd', 'usdc', 'usdz'].includes(fileInfo.ext)) value += 20;
+            if (name === 'robot.urdf' || name === 'model.urdf') value += 120;
+            if (name === 'scene.usd' || name === 'scene.usda' || name === 'root.usd' || name === 'root.usda') value += 100;
+            if (fileInfo.type === 'usd') {
+                const segments = path.split('/');
+                const parentName = segments.length > 1 ? segments[segments.length - 2] : '';
+                const stem = name.replace(/\.(usd|usda|usdc|usdz)$/i, '');
+
+                if (stem && parentName && stem === parentName.toLowerCase()) value += 180;
+                if (path.includes('/configuration/')) value -= 120;
+            }
+            if (name.includes('robot') || name.includes('model')) value += 60;
+            if (name.includes('scene') || name.includes('root')) value += 40;
+
+            if (path.includes('/.thumbs/') || path.includes('/thumbs/') || path.includes('/thumbnail')) value -= 500;
+            if (path.includes('/props/') || path.includes('/materials/') || path.includes('/textures/')) value -= 250;
+            if (path.includes('/meshes/') || path.includes('/mesh/')) value -= 120;
+
+            // Prefer shallower files; nested USD assets are often references, not the root stage.
+            value -= path.split('/').length * 5;
+
+            return value;
+        };
+
+        return loadableFiles.slice().sort((a, b) => {
+            const scoreDiff = score(b) - score(a);
+            if (scoreDiff !== 0) return scoreDiff;
+            return a.name.localeCompare(b.name);
+        })[0];
+    }
+
+    /**
      * Setup file drag-drop
      */
     setupFileDrop(): void {
@@ -135,7 +198,10 @@ export class FileHandler {
                 if (loadableFiles.length > 0) {
                     this.availableModels = loadableFiles;
                     this.onFilesLoaded?.(loadableFiles);
-                    await this.loadFileOrMesh(loadableFiles[0]);
+                    const defaultFile = this.getDefaultLoadableFile(loadableFiles);
+                    if (defaultFile) {
+                        await this.loadFileOrMesh(defaultFile);
+                    }
                 }
             }
         }
@@ -150,18 +216,11 @@ export class FileHandler {
         for (const entry of entries) {
             if (entry.isFile) {
                 const file = await getFileFromEntry(entry as FileSystemFileEntryLike);
-                // fullPath starts with '/', remove leading slash for relative path
-                const fullPath = entry.fullPath || entry.name;
-                const normalizedPath = basePath 
-                    ? `${basePath}/${fullPath.replace(/^\//, '')}`
-                    : fullPath.replace(/^\//, '');
+                const normalizedPath = this.normalizeEntryPath(entry, basePath);
                 this.fileMap.set(normalizedPath, file);
                 files.push({ file, path: normalizedPath });
             } else if (entry.isDirectory) {
-                const dirFullPath = entry.fullPath || entry.name;
-                const normalizedDirPath = basePath
-                    ? `${basePath}/${dirFullPath.replace(/^\//, '')}`
-                    : dirFullPath.replace(/^\//, '');
+                const normalizedDirPath = this.normalizeEntryPath(entry, basePath);
                 const dirFiles = await this.readDirectory(entry as FileSystemDirectoryEntryLike, normalizedDirPath);
                 files.push(...dirFiles);
             }
@@ -180,7 +239,10 @@ export class FileHandler {
         this.onFilesLoaded?.(loadableFiles);
 
         if (loadableFiles.length > 0) {
-            await this.loadFileOrMesh(loadableFiles[0]);
+            const defaultFile = this.getDefaultLoadableFile(loadableFiles);
+            if (defaultFile) {
+                await this.loadFileOrMesh(defaultFile);
+            }
         }
     }
 
@@ -204,10 +266,7 @@ export class FileHandler {
                         if (entry.isFile) {
                             const file = await getFileFromEntry(entry as FileSystemFileEntryLike);
                             // Normalize path to prevent duplicates and ensure consistency
-                            const fullPath = entry.fullPath || entry.name;
-                            const normalizedPath = basePath
-                                ? `${basePath}/${fullPath.replace(/^\//, '')}`
-                                : fullPath.replace(/^\//, '');
+                            const normalizedPath = this.normalizeEntryPath(entry, basePath);
                             
                             // Check for duplicates before adding
                             if (!this.fileMap.has(normalizedPath)) {
@@ -215,10 +274,7 @@ export class FileHandler {
                                 files.push({ file, path: normalizedPath });
                             }
                         } else if (entry.isDirectory) {
-                            const dirFullPath = entry.fullPath || entry.name;
-                            const normalizedDirPath = basePath
-                                ? `${basePath}/${dirFullPath.replace(/^\//, '')}`
-                                : dirFullPath.replace(/^\//, '');
+                            const normalizedDirPath = this.normalizeEntryPath(entry, basePath);
                             const subFiles = await this.readDirectory(entry as FileSystemDirectoryEntryLike, normalizedDirPath);
                             files.push(...subFiles);
                         }

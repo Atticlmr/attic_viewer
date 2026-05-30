@@ -10,8 +10,22 @@ import {
   VSMShadowMap,
   PMREMGenerator,
   EquirectangularReflectionMapping,
+  AmbientLight,
+  DirectionalLight,
+  AxesHelper,
+  Mesh,
+  MeshBasicMaterial,
+  MeshPhongMaterial,
+  SphereGeometry,
+  BoxGeometry,
+  CylinderGeometry,
+  ConeGeometry,
+  Matrix4,
+  Quaternion,
+  Euler,
 } from "three";
 import { ThreeRenderDelegateInterface } from "./hydra/ThreeJsRenderDelegate.js";
+import { clearHydraWarnings } from "./hydra/HydraPrimitives.js";
 import {
   shouldInclude,
   isUsdFile,
@@ -26,6 +40,13 @@ import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
 import "./bindings/emHdBindings.js";
 
 const getUsdModule = globalThis["NEEDLE:USD:GET"];
+const USD_VIEWER_BASE_URL = new URL("./", import.meta.url);
+const getUsdViewerUrl = (path) => new URL(path, USD_VIEWER_BASE_URL).toString();
+const toUsdFsPath = (path) => {
+  if (!path) return "/";
+  const normalized = String(path).replace(/\\/g, "/");
+  return normalized.startsWith("/") ? normalized : `/${normalized}`;
+};
 
 const SKIP_DIRS = [
   ".git",
@@ -52,7 +73,7 @@ export function init(options = { container: null, hdrPath: null }) {
     if (!options?.container) {
       throw new Error("init: options.container is required");
     }
-    options.hdrPath ||= "/usd-viewer/environments/neutral.hdr";
+    options.hdrPath ||= getUsdViewerUrl("environments/neutral.hdr");
 
     let handle = null;
 
@@ -82,15 +103,37 @@ export function init(options = { container: null, hdrPath: null }) {
       }
 
       let currentDisplayFilename = "";
+      const displayOptions = {
+        visual: true,
+        collision: false,
+        com: false,
+        inertia: false,
+        axes: false,
+        jointAxes: false,
+      };
+      const usdHelpers = {
+        axes: new Group(),
+        jointAxes: new Group(),
+        com: new Group(),
+        inertia: new Group(),
+        collision: new Group(),
+      };
+      let usdLinkAxes = [];
+      let usdPhysicsInfo = {
+        physicsAvailable: false,
+        joints: [],
+        rigidBodies: [],
+        collisions: [],
+      };
       const initPromise = setup();
 
       console.log("Loading USD Module...");
       try {
         Promise.all([
           getUsdModule({
-            mainScriptUrlOrBlob: "/usd-viewer/bindings/emHdBindings.js",
+            mainScriptUrlOrBlob: getUsdViewerUrl("bindings/emHdBindings.js"),
             locateFile: (file) => {
-              return "/usd-viewer/bindings/" + file;
+              return getUsdViewerUrl("bindings/" + file);
             },
             // Suppress noisy OpenUSD discovery warnings that don't affect functionality
             printErr: (text) => {
@@ -214,6 +257,21 @@ export function init(options = { container: null, hdrPath: null }) {
           console.warn("USD not ready; skipping clearStage.");
           return;
         }
+        for (const group of Object.values(usdHelpers)) {
+          clearHelperGroup(group);
+          if (group.parent) group.parent.remove(group);
+        }
+        usdLinkAxes.forEach((helper) => {
+          if (helper.parent) helper.parent.remove(helper);
+        });
+        usdLinkAxes = [];
+        usdPhysicsInfo = {
+          physicsAvailable: false,
+          joints: [],
+          rigidBodies: [],
+          collisions: [],
+        };
+        clearHydraWarnings();
         // Try to dispose the driver/stage first to avoid any layer save attempts
         if (!safeCall(window.driver, "Dispose")) {
           safeCall(window.driver, "Destroy");
@@ -287,11 +345,16 @@ export function init(options = { container: null, hdrPath: null }) {
         window.usdRoot.rotation.x =
           String.fromCharCode(stage.GetUpAxis()) === "z" ? -Math.PI / 2 : 0;
 
+        const meshCount = window.usdRoot.children.length;
         fitCameraToSelection(window.camera, window._controls, [window.usdRoot]);
+        render();
         ready = true;
 
+        logHydraTransformStats(renderInterface);
+        await buildUsdHelpers(renderInterface);
+
         console.log('[USD Viewer] Loading complete! Scene state:');
-        console.log('  - usdRoot.children:', window.usdRoot.children.length);
+        console.log('  - usdRoot.children:', meshCount);
         console.log('  - camera.position:', window.camera.position);
         console.log('  - renderer.domElement size:', {
             width: window.renderer.domElement.width,
@@ -302,6 +365,1150 @@ export function init(options = { container: null, hdrPath: null }) {
 
         const root = {};
         addPath(root, "/");
+
+        return {
+          meshCount,
+          loadedFiles: Object.keys(root).length,
+        };
+      }
+
+      function logHydraTransformStats(renderInterface) {
+        const meshes = Object.values(renderInterface?.meshes || {});
+        window.usdRoot.updateMatrixWorld(true);
+
+        const translatedMeshes = meshes.filter((mesh) => {
+          const elements = mesh._mesh?.matrix?.elements;
+          return elements && Math.abs(elements[12]) + Math.abs(elements[13]) + Math.abs(elements[14]) > 1e-9;
+        });
+        const transformedMeshes = meshes.filter((mesh) => (mesh._transformUpdates || 0) > 0);
+        const nonIdentityInputs = meshes.filter((mesh) => {
+          const values = mesh._lastTransformValues;
+          if (!values?.length) return false;
+
+          const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+          return values.some((value, index) => Math.abs(value - identity[index]) > 1e-9);
+        });
+        const sample = meshes.slice(0, 12).map((mesh) => {
+          const elements = mesh._mesh?.matrix?.elements || [];
+          const worldElements = mesh._mesh?.matrixWorld?.elements || [];
+          return {
+            id: mesh._id,
+            instancerId: mesh._instancerId,
+            transformUpdates: mesh._transformUpdates || 0,
+            inputTranslation: [
+              mesh._lastTransformValues?.[3],
+              mesh._lastTransformValues?.[7],
+              mesh._lastTransformValues?.[11],
+              mesh._lastTransformValues?.[12],
+              mesh._lastTransformValues?.[13],
+              mesh._lastTransformValues?.[14],
+            ],
+            localTranslation: [elements[12], elements[13], elements[14]],
+            worldTranslation: [worldElements[12], worldElements[13], worldElements[14]],
+          };
+        });
+
+        const transformStats = {
+          meshCount: meshes.length,
+          transformUpdateCount: transformedMeshes.length,
+          nonIdentityInputCount: nonIdentityInputs.length,
+          translatedMeshCount: translatedMeshes.length,
+          instancedMeshCount: meshes.filter((mesh) => mesh._instancerId).length,
+          sample,
+        };
+        window.__usdHydraTransformStats = transformStats;
+        console.log('[USD Viewer] Hydra transform stats:', window.__usdHydraTransformStats);
+        post("USD_TRANSFORM_STATS", { stats: transformStats });
+      }
+
+      function isCollisionObject(object) {
+        const path = normalizeUsdPath(object.userData?.usdPath || object.name || "");
+        return usdPhysicsInfo.collisions.some((collision) =>
+          pathMatchesUsdPath(path, collision.path)
+        );
+      }
+
+      function applyDisplayOptions(nextOptions = {}) {
+        Object.assign(displayOptions, nextOptions);
+
+        window.usdRoot?.traverse((object) => {
+          if (!(object instanceof Mesh)) return;
+          if (object.userData?.isUsdHelper) return;
+          object.visible = isCollisionObject(object)
+            ? displayOptions.collision
+            : displayOptions.visual;
+        });
+
+        usdHelpers.axes.visible = displayOptions.axes;
+        usdLinkAxes.forEach((helper) => {
+          helper.visible = displayOptions.axes;
+        });
+        usdHelpers.jointAxes.visible = displayOptions.jointAxes;
+        usdHelpers.com.visible = displayOptions.com;
+        usdHelpers.inertia.visible = displayOptions.inertia;
+        usdHelpers.collision.visible = displayOptions.collision;
+        render();
+      }
+
+      function clearHelperGroup(group) {
+        while (group.children.length) {
+          group.remove(group.children[0]);
+        }
+      }
+
+      function createAxisHelper(size) {
+        const helper = new AxesHelper(size);
+        helper.userData.isUsdHelper = true;
+        helper.traverse((child) => {
+          child.userData.isUsdHelper = true;
+          if (child.material) {
+            child.material.depthTest = false;
+            child.material.depthWrite = false;
+          }
+          child.renderOrder = 1000;
+          child.raycast = () => {};
+        });
+        return helper;
+      }
+
+      function getRootLocalBox(object) {
+        const worldBox = new Box3().setFromObject(object);
+        if (worldBox.isEmpty()) return worldBox;
+
+        const points = [
+          new Vector3(worldBox.min.x, worldBox.min.y, worldBox.min.z),
+          new Vector3(worldBox.min.x, worldBox.min.y, worldBox.max.z),
+          new Vector3(worldBox.min.x, worldBox.max.y, worldBox.min.z),
+          new Vector3(worldBox.min.x, worldBox.max.y, worldBox.max.z),
+          new Vector3(worldBox.max.x, worldBox.min.y, worldBox.min.z),
+          new Vector3(worldBox.max.x, worldBox.min.y, worldBox.max.z),
+          new Vector3(worldBox.max.x, worldBox.max.y, worldBox.min.z),
+          new Vector3(worldBox.max.x, worldBox.max.y, worldBox.max.z),
+        ];
+
+        const localBox = new Box3();
+        localBox.makeEmpty();
+        points.forEach((point) => localBox.expandByPoint(worldToUsdRootLocal(point)));
+        return localBox;
+      }
+
+      function createArrowHelper(axis, size) {
+        const group = new Group();
+        group.userData.isUsdHelper = true;
+        const material = new MeshBasicMaterial({
+          color: 0xff3838,
+          depthTest: false,
+          depthWrite: false,
+        });
+        const shaft = new Mesh(
+          new CylinderGeometry(size * 0.04, size * 0.04, size * 0.85, 16),
+          material
+        );
+        shaft.position.y = size * 0.425;
+        const head = new Mesh(
+          new ConeGeometry(size * 0.13, size * 0.32, 20),
+          material
+        );
+        head.position.y = size * 1.01;
+        group.add(shaft, head);
+        const q = new Quaternion().setFromUnitVectors(
+          new Vector3(0, 1, 0),
+          axis.clone().normalize()
+        );
+        group.quaternion.copy(q);
+        group.renderOrder = 1000;
+        group.traverse((child) => {
+          child.userData.isUsdHelper = true;
+          child.renderOrder = 1000;
+        });
+        group.raycast = () => {};
+        return group;
+      }
+
+      function getMeshCenterAndSize(mesh) {
+        mesh.updateMatrixWorld(true);
+        mesh.geometry?.computeBoundingBox?.();
+        const box = new Box3().setFromObject(mesh);
+        const size = box.getSize(new Vector3());
+        const center = box.getCenter(new Vector3());
+        return { box, center, size, maxDim: Math.max(size.x, size.y, size.z) };
+      }
+
+      function worldToUsdRootLocal(point) {
+        window.usdRoot.updateMatrixWorld(true);
+        return window.usdRoot.worldToLocal(point.clone());
+      }
+
+      function toArray(value) {
+        if (value == null) return [];
+        if (Array.isArray(value)) return value;
+        if (typeof value === "string") return [value];
+        if (typeof value === "number") return [value];
+        if (typeof value[Symbol.iterator] === "function") return Array.from(value);
+        if (typeof value.size === "function" && typeof value.get === "function") {
+          const result = [];
+          for (let i = 0; i < value.size(); i++) result.push(value.get(i));
+          return result;
+        }
+        if (typeof value.length === "number") return Array.from(value);
+        if (typeof value.values === "function") {
+          try {
+            return Array.from(value.values());
+          } catch {}
+        }
+        if (typeof value.next === "function") {
+          const result = [];
+          for (let i = 0; i < 100000; i++) {
+            const next = value.next();
+            if (!next || next.done) break;
+            result.push(next.value);
+          }
+          return result;
+        }
+        return [];
+      }
+
+      function toNumberArray(value) {
+        if (value == null) return [];
+        if (typeof value === "string") {
+          return value.match(/-?(?:Infinity|inf|\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi)?.map(Number) || [];
+        }
+        if (typeof value === "number") return [value];
+        if (value && typeof value === "object") {
+          const vectorValues = [value.x, value.y, value.z, value.w].filter((item) => item !== undefined);
+          if (vectorValues.length) return vectorValues.map(Number);
+        }
+        const arr = toArray(value);
+        if (arr.length) {
+          const numbers = arr.map((item) => {
+            if (typeof item === "number") return item;
+            const parsed = Number(tokenToString(item));
+            return parsed;
+          });
+          if (numbers.every(Number.isFinite)) return numbers;
+        }
+        return String(value ?? "").match(/-?(?:Infinity|inf|\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi)?.map(Number) || [];
+      }
+
+      function toFiniteVec3(value, fallback = [0, 0, 0]) {
+        const arr = toNumberArray(value).slice(0, 3).map((item) => Number(item));
+        if (arr.length < 3 || arr.some((item) => !Number.isFinite(item))) return fallback.slice();
+        return arr;
+      }
+
+      function tokenToString(value) {
+        if (value == null) return "";
+        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+          return cleanTokenString(String(value));
+        }
+        const methods = ["GetString", "getString", "GetText", "getText", "GetPathString", "GetAsString", "ToString"];
+        for (const method of methods) {
+          try {
+            if (typeof value[method] === "function") {
+              const result = value[method]();
+              if (result != null && result !== value) return tokenToString(result);
+            }
+          } catch {}
+        }
+        const props = ["pathString", "name", "value", "token", "text", "path"];
+        for (const prop of props) {
+          try {
+            if (value[prop] != null && value[prop] !== value) return tokenToString(value[prop]);
+          } catch {}
+        }
+        return cleanTokenString(String(value));
+      }
+
+      function cleanTokenString(value) {
+        let result = String(value ?? "").trim().replace(/^['"]|['"]$/g, "");
+        const wrapped = result.match(/^(?:TfToken|SdfPath)\((.*)\)$/);
+        if (wrapped) result = wrapped[1].trim().replace(/^['"]|['"]$/g, "");
+        return result;
+      }
+
+      function normalizeUsdPath(path) {
+        const normalized = tokenToString(path).replace(/\\/g, "/").replace(/\/+$/g, "");
+        if (!normalized || normalized === "/") return normalized;
+        return normalized.startsWith("/") ? normalized : `/${normalized}`;
+      }
+
+      function pathMatchesUsdPath(path, targetPath) {
+        const normalizedPath = normalizeUsdPath(path);
+        const normalizedTarget = normalizeUsdPath(targetPath);
+        return Boolean(
+          normalizedTarget &&
+          (normalizedPath === normalizedTarget || normalizedPath.startsWith(`${normalizedTarget}/`))
+        );
+      }
+
+      function findMeshForUsdPath(meshes, usdPath) {
+        return meshes.find((mesh) => pathMatchesUsdPath(mesh.userData?.usdPath || "", usdPath));
+      }
+
+      function serializeRigidBody(body) {
+        return {
+          path: body.path,
+          name: body.name,
+          mass: body.mass,
+          centerOfMass: body.centerOfMass,
+          diagonalInertia: body.diagonalInertia,
+          principalAxes: body.principalAxes,
+          inferred: Boolean(body.inferred),
+        };
+      }
+
+      function getBodyCenterOfMassRootLocal(body, bodyMesh) {
+        const localCom = new Vector3(...body.centerOfMass);
+        if (body.worldMatrix) return localCom.applyMatrix4(body.worldMatrix);
+        const bodyMatrix = bodyMesh?.matrixWorld;
+        return bodyMatrix
+          ? worldToUsdRootLocal(localCom.applyMatrix4(bodyMatrix))
+          : localCom;
+      }
+
+      function getBodyRootRotation(body, bodyMesh) {
+        const matrix = body.worldMatrix || bodyMesh?.matrixWorld;
+        return matrix ? new Quaternion().setFromRotationMatrix(matrix) : new Quaternion();
+      }
+
+      function getInertiaPrincipalAxes(body) {
+        if (body.principalAxes && body.principalAxes.length >= 4) {
+          return new Quaternion(
+            body.principalAxes[1],
+            body.principalAxes[2],
+            body.principalAxes[3],
+            body.principalAxes[0]
+          ).normalize();
+        }
+        return new Quaternion();
+      }
+
+      function computeInertiaBoxFromUsd(body) {
+        const diag = body.diagonalInertia || [];
+        if (diag.length < 3 || diag.some((value) => !Number.isFinite(value))) return null;
+
+        const [ixx, iyy, izz] = diag;
+        const mass = Number.isFinite(Number(body.mass)) && Number(body.mass) > 0
+          ? Number(body.mass)
+          : 1;
+
+        const inertiaThreshold = 1e-9;
+        if (Math.abs(ixx) < inertiaThreshold && Math.abs(iyy) < inertiaThreshold && Math.abs(izz) < inertiaThreshold) {
+          return null;
+        }
+
+        const factor = 6.0 / mass;
+        const widthSquared = factor * (iyy + izz - ixx);
+        const heightSquared = factor * (ixx + izz - iyy);
+        const depthSquared = factor * (ixx + iyy - izz);
+        if (![widthSquared, heightSquared, depthSquared].every((value) => Number.isFinite(value) && value > 0)) {
+          return null;
+        }
+
+        const minSize = 0.01;
+        return {
+          width: Math.max(Math.sqrt(widthSquared), minSize),
+          height: Math.max(Math.sqrt(heightSquared), minSize),
+          depth: Math.max(Math.sqrt(depthSquared), minSize),
+        };
+      }
+
+      function getMeshRootLocalBox(mesh) {
+        mesh.updateMatrixWorld(true);
+        const worldBox = new Box3().setFromObject(mesh);
+        const localBox = new Box3();
+        localBox.makeEmpty();
+        if (worldBox.isEmpty()) return localBox;
+
+        [
+          new Vector3(worldBox.min.x, worldBox.min.y, worldBox.min.z),
+          new Vector3(worldBox.min.x, worldBox.min.y, worldBox.max.z),
+          new Vector3(worldBox.min.x, worldBox.max.y, worldBox.min.z),
+          new Vector3(worldBox.min.x, worldBox.max.y, worldBox.max.z),
+          new Vector3(worldBox.max.x, worldBox.min.y, worldBox.min.z),
+          new Vector3(worldBox.max.x, worldBox.min.y, worldBox.max.z),
+          new Vector3(worldBox.max.x, worldBox.max.y, worldBox.min.z),
+          new Vector3(worldBox.max.x, worldBox.max.y, worldBox.max.z),
+        ].forEach((point) => localBox.expandByPoint(worldToUsdRootLocal(point)));
+        return localBox;
+      }
+
+      function pathLooksCollision(path) {
+        return /(^|[/_:.-])(collision|collisions|collider|colliders|col|colgeom)([/_:.-]|$)/i.test(path);
+      }
+
+      function pathLooksVisual(path) {
+        return /(^|[/_:.-])(visual|visuals|render|mesh|meshes)([/_:.-]|$)/i.test(path);
+      }
+
+      function inferBodyPathFromMeshPath(path) {
+        const normalized = normalizeUsdPath(path);
+        const parts = normalized.split("/").filter(Boolean);
+        while (parts.length > 1) {
+          const last = parts[parts.length - 1].toLowerCase();
+          if (
+            pathLooksCollision(last) ||
+            pathLooksVisual(last) ||
+            /^(geom|geometry|shape|mesh|visual|collision)[_\-.]?\d*$/i.test(last)
+          ) {
+            parts.pop();
+            continue;
+          }
+          break;
+        }
+        return parts.length ? `/${parts.join("/")}` : normalized;
+      }
+
+      function inferPhysicsInfoFromMeshes(meshes, physicsInfo) {
+        const collisions = physicsInfo.collisions.slice();
+        const hasCollision = new Set(collisions.map((item) => normalizeUsdPath(item.path)));
+
+        meshes.forEach((mesh) => {
+          const path = normalizeUsdPath(mesh.userData?.usdPath || mesh.name || "");
+          if (!path) return;
+          if (pathLooksCollision(path) && !hasCollision.has(path)) {
+            collisions.push({ path, name: path.split("/").pop(), inferred: true });
+            hasCollision.add(path);
+          }
+        });
+
+        if (!collisions.length) {
+          meshes.forEach((mesh) => {
+            const path = normalizeUsdPath(mesh.userData?.usdPath || mesh.name || "");
+            if (!path || pathLooksVisual(path)) return;
+            if (/(^|[/_:.-])(collision|collider|colgeom)([/_:.-]|\d|$)/i.test(path) && !hasCollision.has(path)) {
+              collisions.push({ path, name: path.split("/").pop(), inferred: true });
+              hasCollision.add(path);
+            }
+          });
+        }
+
+        return {
+          ...physicsInfo,
+          physicsAvailable: physicsInfo.physicsAvailable || collisions.length > 0,
+          collisions,
+        };
+      }
+
+      function mergePhysicsInfo(primary, fallback) {
+        const jointsByPath = new Map(primary.joints.map((item) => [normalizeUsdPath(item.path), item]));
+        const bodiesByPath = new Map(primary.rigidBodies.map((item) => [normalizeUsdPath(item.path), item]));
+        const collisionsByPath = new Map(primary.collisions.map((item) => [normalizeUsdPath(item.path), item]));
+
+        fallback.joints.forEach((item) => {
+          const path = normalizeUsdPath(item.path);
+          if (path && !jointsByPath.has(path)) jointsByPath.set(path, item);
+        });
+        fallback.rigidBodies.forEach((item) => {
+          const path = normalizeUsdPath(item.path);
+          if (path && !bodiesByPath.has(path)) bodiesByPath.set(path, item);
+        });
+        fallback.collisions.forEach((item) => {
+          const path = normalizeUsdPath(item.path);
+          if (path && !collisionsByPath.has(path)) collisionsByPath.set(path, item);
+        });
+
+        return {
+          physicsAvailable: primary.physicsAvailable || fallback.physicsAvailable,
+          joints: Array.from(jointsByPath.values()),
+          rigidBodies: Array.from(bodiesByPath.values()),
+          collisions: Array.from(collisionsByPath.values()),
+        };
+      }
+
+      function createEmptyPhysicsInfo() {
+        return {
+          physicsAvailable: false,
+          joints: [],
+          rigidBodies: [],
+          collisions: [],
+        };
+      }
+
+      function readMountedTextFile(path) {
+        try {
+          const text = USD.FS_readFile(path, { encoding: "utf8" });
+          if (typeof text === "string" && text.includes("physics:")) return text;
+        } catch {}
+
+        try {
+          const bytes = USD.FS_readFile(path);
+          if (!bytes || bytes.length === 0) return "";
+          const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+          if (text.includes("\u0000") || !text.includes("physics:")) return "";
+          return text;
+        } catch {}
+
+        return "";
+      }
+
+      function getRecord(records, path) {
+        const normalized = normalizeUsdPath(path);
+        if (!normalized || normalized === "/") return null;
+        if (!records.has(normalized)) {
+          records.set(normalized, {
+            path: normalized,
+            name: normalized.split("/").pop(),
+            parentPath: getParentPath(normalized),
+            typeName: "",
+            appliedSchemas: [],
+            attrs: {},
+            relationships: {
+              body0: [],
+              body1: [],
+            },
+            localMatrix: new Matrix4(),
+            worldMatrix: null,
+          });
+        }
+        return records.get(normalized);
+      }
+
+      function parseUsdPrimSpec(line) {
+        const match = line.match(/\b(?:def|over|class)\s+(?:(\w+)\s+)?"([^"]+)"/);
+        if (!match) return null;
+        return {
+          typeName: match[1] || "",
+          name: match[2],
+        };
+      }
+
+      function parseUsdRelationshipTarget(value) {
+        const match = String(value || "").match(/<([^>]+)>/);
+        return match ? normalizeUsdPath(match[1]) : "";
+      }
+
+      function parseUsdPhysicsLayerText(text, sourcePath) {
+        const records = new Map();
+        const stack = [];
+        let pendingPath = "";
+        let pendingTypeName = "";
+
+        const getCurrentRecord = () => {
+          const target = pendingPath || (stack.length ? stack[stack.length - 1] : "");
+          return target ? getRecord(records, target) : null;
+        };
+
+        text.split(/\r?\n/).forEach((rawLine) => {
+          const line = rawLine.replace(/#.*/, "").trim();
+          if (!line) return;
+
+          const primSpec = parseUsdPrimSpec(line);
+          if (primSpec) {
+            const parent = stack.length ? stack[stack.length - 1] : "";
+            pendingPath = normalizeUsdPath(`${parent}/${primSpec.name}`);
+            pendingTypeName = primSpec.typeName;
+            const record = getRecord(records, pendingPath);
+            if (record) record.typeName = primSpec.typeName || record.typeName;
+          }
+
+          const schemaMatch = line.match(/apiSchemas\s*=\s*\[([^\]]*)\]/);
+          if (schemaMatch) {
+            const record = getCurrentRecord();
+            if (record) {
+              const schemas = schemaMatch[1]
+                .split(",")
+                .map((item) => cleanTokenString(item.trim()))
+                .filter(Boolean);
+              record.appliedSchemas.push(...schemas.filter((schema) => !record.appliedSchemas.includes(schema)));
+            }
+          }
+
+          const relMatch = line.match(/rel\s+(physics:body[01])\s*=\s*(.+)$/);
+          if (relMatch) {
+            const record = getCurrentRecord();
+            const target = parseUsdRelationshipTarget(relMatch[2]);
+            if (record && target) {
+              if (relMatch[1] === "physics:body0") record.relationships.body0 = [target];
+              if (relMatch[1] === "physics:body1") record.relationships.body1 = [target];
+            }
+          }
+
+          const attrMatch = line.match(/\b(physics:[A-Za-z0-9_:]+|xformOp:[A-Za-z0-9_:]+)\s*=\s*(.+)$/);
+          if (attrMatch) {
+            const record = getCurrentRecord();
+            if (record) record.attrs[attrMatch[1]] = attrMatch[2].replace(/,$/, "").trim();
+          }
+
+          if (line.includes("{") && pendingPath) {
+            stack.push(pendingPath);
+            pendingPath = "";
+            pendingTypeName = "";
+          }
+
+          const closeCount = (line.match(/}/g) || []).length;
+          for (let i = 0; i < closeCount; i++) {
+            stack.pop();
+          }
+        });
+
+        Array.from(records.values())
+          .sort((a, b) => a.path.length - b.path.length)
+          .forEach((record) => {
+            const hasXform = Object.keys(record.attrs).some((name) => name.startsWith("xformOp:"));
+            record.localMatrix = hasXform ? getLocalTransform(record) : new Matrix4();
+            const parent = records.get(record.parentPath);
+            if (hasXform || parent?.worldMatrix) {
+              record.worldMatrix = parent?.worldMatrix
+                ? parent.worldMatrix.clone().multiply(record.localMatrix)
+                : record.localMatrix.clone();
+            }
+          });
+
+        return collectUsdPhysicsInfoFromRecords(records, sourcePath);
+      }
+
+      function collectUsdPhysicsInfoFromMountedFiles() {
+        const files = getAllLoadedFiles()
+          .filter((path) => /\.(usd|usda)$/i.test(path))
+          .filter((path) => !String(path).toLowerCase().endsWith(".usdz"));
+        const merged = {
+          physicsAvailable: false,
+          joints: [],
+          rigidBodies: [],
+          collisions: [],
+        };
+        const parsedFiles = [];
+
+        files.forEach((path) => {
+          const text = readMountedTextFile(path);
+          if (!text) return;
+          const info = parseUsdPhysicsLayerText(text, path);
+          if (!info.physicsAvailable) return;
+          parsedFiles.push(path);
+          const next = mergePhysicsInfo(merged, info);
+          merged.physicsAvailable = next.physicsAvailable;
+          merged.joints = next.joints;
+          merged.rigidBodies = next.rigidBodies;
+          merged.collisions = next.collisions;
+        });
+
+        if (parsedFiles.length) {
+          console.log("[USD Physics] Parsed mounted physics layers:", parsedFiles);
+        }
+
+        return merged;
+      }
+
+      async function openMountedPhysicsStage(path) {
+        const triedPaths = [];
+        const candidatePaths = Array.from(new Set([
+          path,
+          String(path).replace(/^\//, ""),
+        ].filter(Boolean)));
+
+        for (const candidatePath of candidatePaths) {
+          let tempDriver = null;
+          const tempRoot = new Group();
+          const tempRenderInterface = new ThreeRenderDelegateInterface({
+            usdRoot: tempRoot,
+            paths: [],
+            driver: () => tempDriver,
+          });
+
+          try {
+            triedPaths.push(candidatePath);
+            tempDriver = new USD.HdWebSyncDriver(tempRenderInterface, candidatePath);
+            if (tempDriver instanceof Promise) {
+              tempDriver = await tempDriver;
+            }
+
+            safeCall(tempDriver, "Draw");
+            let stage = safeCall(tempDriver, "GetStage");
+            if (stage instanceof Promise) {
+              stage = await stage;
+              stage = safeCall(tempDriver, "GetStage");
+            }
+
+            const info = collectUsdPhysicsInfo(stage);
+            if (info.physicsAvailable) {
+              return { info, openedPath: candidatePath, triedPaths };
+            }
+          } catch (error) {
+            console.warn("[USD Physics] Failed to open mounted physics stage:", candidatePath, error);
+          } finally {
+            if (tempDriver) {
+              if (!safeCall(tempDriver, "Dispose")) {
+                safeCall(tempDriver, "Destroy");
+              }
+            }
+            tempRoot.clear();
+          }
+        }
+
+        return { info: createEmptyPhysicsInfo(), openedPath: "", triedPaths };
+      }
+
+      async function collectUsdPhysicsInfoFromMountedStages() {
+        const files = getAllLoadedFiles()
+          .filter((path) => /\.(usd|usda|usdc)$/i.test(path))
+          .filter((path) => !String(path).toLowerCase().endsWith(".usdz"))
+          .filter((path) => /physics/i.test(path));
+        const merged = createEmptyPhysicsInfo();
+        const openedFiles = [];
+
+        for (const path of files) {
+          const { info, openedPath } = await openMountedPhysicsStage(path);
+          if (!info.physicsAvailable) continue;
+          openedFiles.push(openedPath || path);
+          const next = mergePhysicsInfo(merged, info);
+          merged.physicsAvailable = next.physicsAvailable;
+          merged.joints = next.joints;
+          merged.rigidBodies = next.rigidBodies;
+          merged.collisions = next.collisions;
+        }
+
+        if (files.length && !openedFiles.length) {
+          console.warn("[USD Physics] Mounted physics files found but no physics prims were readable:", files);
+        } else if (openedFiles.length) {
+          console.log("[USD Physics] Parsed mounted physics stages:", openedFiles);
+        }
+
+        return merged;
+      }
+
+      function createCollisionOverlay(mesh, material) {
+        if (!mesh.geometry) return null;
+        window.usdRoot.updateMatrixWorld(true);
+        mesh.updateMatrixWorld(true);
+
+        const overlay = new Mesh(mesh.geometry, material);
+        const rootInverse = new Matrix4().copy(window.usdRoot.matrixWorld).invert();
+        overlay.matrix.copy(rootInverse.multiply(mesh.matrixWorld));
+        overlay.matrixAutoUpdate = false;
+        overlay.userData.isUsdHelper = true;
+        overlay.renderOrder = 1040;
+        overlay.raycast = () => {};
+        return overlay;
+      }
+
+      function toFiniteNumber(value, fallback = 0) {
+        const arr = toNumberArray(value);
+        const number = Number(arr.length ? arr[0] : value);
+        return Number.isFinite(number) ? number : fallback;
+      }
+
+      function axisTokenToVector(axis) {
+        const token = tokenToString(axis).toUpperCase();
+        if (token === "X") return new Vector3(1, 0, 0);
+        if (token === "Y") return new Vector3(0, 1, 0);
+        return new Vector3(0, 0, 1);
+      }
+
+      function quaternionFromUsd(value) {
+        const arr = toNumberArray(value).slice(0, 4).map(Number);
+        if (arr.length < 4 || arr.some((item) => !Number.isFinite(item))) {
+          return new Quaternion();
+        }
+        return new Quaternion(arr[1], arr[2], arr[3], arr[0]).normalize();
+      }
+
+      function callMaybe(object, method, ...args) {
+        try {
+          if (object && typeof object[method] === "function") {
+            return object[method](...args);
+          }
+        } catch (error) {
+          console.warn(`[USD Viewer] ${method} failed`, error);
+        }
+        return undefined;
+      }
+
+      function vectorLikeToArray(value) {
+        const arr = toNumberArray(value);
+        if (arr.length) return arr;
+        if (value && typeof value === "object") {
+          return [value.x, value.y, value.z].filter((item) => item !== undefined);
+        }
+        return [];
+      }
+
+      function getPrimPath(prim) {
+        const path = callMaybe(prim, "GetPath");
+        return normalizeUsdPath(path ?? callMaybe(prim, "GetName") ?? "");
+      }
+
+      function getPrimType(prim) {
+        return tokenToString(callMaybe(prim, "GetTypeName"));
+      }
+
+      function getAppliedSchemas(prim) {
+        return toArray(callMaybe(prim, "GetAppliedSchemas")).map(tokenToString);
+      }
+
+      function getAttrValue(prim, name) {
+        const attr = callMaybe(prim, "GetAttribute", name);
+        return callMaybe(attr, "Get");
+      }
+
+      function getRelationshipTargets(prim, name) {
+        const rel = callMaybe(prim, "GetRelationship", name);
+        return toArray(callMaybe(rel, "GetTargets")).map(normalizeUsdPath);
+      }
+
+      function collectStagePrims(stage) {
+        const traversed = callMaybe(stage, "Traverse");
+        const prims = toArray(traversed);
+        if (prims.length) return prims;
+
+        const pseudoRoot = callMaybe(stage, "GetPseudoRoot");
+        const result = [];
+        const visit = (prim) => {
+          if (!prim) return;
+          result.push(prim);
+          toArray(callMaybe(prim, "GetChildren")).forEach(visit);
+        };
+        visit(pseudoRoot);
+        return result;
+      }
+
+      function getParentPath(path) {
+        const index = path.lastIndexOf("/");
+        return index > 0 ? path.slice(0, index) : "";
+      }
+
+      function getLocalTransform(record) {
+        const matrixValues = toNumberArray(record.attrs["xformOp:transform"]).map(Number);
+        if (matrixValues.length >= 16 && matrixValues.every(Number.isFinite)) {
+          return new Matrix4().fromArray(matrixValues);
+        }
+
+        const matrix = new Matrix4();
+        const translate = toFiniteVec3(record.attrs["xformOp:translate"]);
+        const scale = toFiniteVec3(record.attrs["xformOp:scale"], [1, 1, 1]);
+        const quaternion = quaternionFromUsd(record.attrs["xformOp:orient"]);
+        const rotateXYZ = toFiniteVec3(record.attrs["xformOp:rotateXYZ"]);
+        if (rotateXYZ.some((value) => value !== 0)) {
+          const euler = rotateXYZ.map((value) => value * Math.PI / 180);
+          quaternion.multiply(new Quaternion().setFromEuler(new Euler(euler[0], euler[1], euler[2], "XYZ")));
+        }
+        matrix.compose(
+          new Vector3(...translate),
+          quaternion,
+          new Vector3(...scale)
+        );
+        return matrix;
+      }
+
+      function collectUsdPhysicsInfoFromRecords(records, sourcePath = "") {
+        const rigidBodies = [];
+        const collisions = [];
+        const joints = [];
+
+        for (const record of records.values()) {
+          const schemas = record.appliedSchemas.join(" ");
+          const hasMassAttr = record.attrs["physics:mass"] !== undefined;
+          const hasCenterOfMassAttr = record.attrs["physics:centerOfMass"] !== undefined;
+          const hasDiagonalInertiaAttr = record.attrs["physics:diagonalInertia"] !== undefined;
+          const hasCollisionAttr = record.attrs["physics:collisionEnabled"] !== undefined;
+          const isRigidBody = schemas.includes("PhysicsRigidBodyAPI") ||
+            schemas.includes("PhysicsMassAPI") ||
+            hasMassAttr ||
+            hasCenterOfMassAttr ||
+            hasDiagonalInertiaAttr;
+          const isCollision = schemas.includes("PhysicsCollisionAPI") ||
+            record.typeName.includes("Collision") ||
+            hasCollisionAttr;
+
+          if (isRigidBody) {
+            rigidBodies.push({
+              path: record.path,
+              name: record.name,
+              mass: toFiniteNumber(record.attrs["physics:mass"], 0),
+              centerOfMass: toFiniteVec3(record.attrs["physics:centerOfMass"]),
+              diagonalInertia: toFiniteVec3(record.attrs["physics:diagonalInertia"]),
+              principalAxes: toNumberArray(record.attrs["physics:principalAxes"]).slice(0, 4),
+              worldMatrix: record.worldMatrix?.clone?.() || null,
+              sourcePath,
+            });
+          }
+
+          if (isCollision) {
+            collisions.push({ path: record.path, name: record.name, sourcePath });
+          }
+
+          if (record.typeName.includes("Physics") && record.typeName.includes("Joint")) {
+            const body0 = record.relationships.body0[0] || "";
+            const body1 = record.relationships.body1[0] || "";
+            const body0Record = records.get(body0);
+            const localPos0 = toFiniteVec3(record.attrs["physics:localPos0"]);
+            const localRot0 = quaternionFromUsd(record.attrs["physics:localRot0"]);
+            const axisLocal = axisTokenToVector(record.attrs["physics:axis"]);
+            const baseMatrix = body0Record?.worldMatrix || record.worldMatrix || new Matrix4();
+            const originWorld = new Vector3(...localPos0).applyMatrix4(baseMatrix);
+            const bodyRotation = new Quaternion().setFromRotationMatrix(baseMatrix);
+            const axisWorld = axisLocal.clone().applyQuaternion(localRot0).applyQuaternion(bodyRotation).normalize();
+            const lower = toFiniteNumber(record.attrs["physics:lowerLimit"], NaN);
+            const upper = toFiniteNumber(record.attrs["physics:upperLimit"], NaN);
+            const typeName = record.typeName;
+            joints.push({
+              path: record.path,
+              name: record.name,
+              type: typeName.includes("Fixed") ? "fixed" : (typeName.includes("Prismatic") ? "prismatic" : "revolute"),
+              body0,
+              body1,
+              axis: [axisWorld.x, axisWorld.y, axisWorld.z],
+              origin: [originWorld.x, originWorld.y, originWorld.z],
+              lowerLimit: Number.isFinite(lower) ? lower : null,
+              upperLimit: Number.isFinite(upper) ? upper : null,
+              sourcePath,
+            });
+          }
+        }
+
+        return {
+          physicsAvailable: joints.length > 0 || rigidBodies.length > 0 || collisions.length > 0,
+          joints,
+          rigidBodies,
+          collisions,
+        };
+      }
+
+      function collectUsdPhysicsInfo(stage) {
+        const prims = collectStagePrims(stage);
+        const records = new Map();
+
+        prims.forEach((prim) => {
+          const path = getPrimPath(prim);
+          if (!path || path === "/") return;
+          const typeName = getPrimType(prim);
+          const appliedSchemas = getAppliedSchemas(prim);
+          const attrs = {};
+          [
+            "xformOp:translate",
+            "xformOp:orient",
+            "xformOp:rotateXYZ",
+            "xformOp:scale",
+            "xformOp:transform",
+            "physics:axis",
+            "physics:localPos0",
+            "physics:localPos1",
+            "physics:localRot0",
+            "physics:localRot1",
+            "physics:lowerLimit",
+            "physics:upperLimit",
+            "physics:centerOfMass",
+            "physics:diagonalInertia",
+            "physics:principalAxes",
+            "physics:mass",
+            "physics:collisionEnabled",
+          ].forEach((name) => {
+            const value = getAttrValue(prim, name);
+            if (value !== undefined) attrs[name] = value;
+          });
+          records.set(path, {
+            prim,
+            path,
+            name: path.split("/").pop(),
+            parentPath: getParentPath(path),
+            typeName,
+            appliedSchemas,
+            attrs,
+            relationships: {
+              body0: getRelationshipTargets(prim, "physics:body0"),
+              body1: getRelationshipTargets(prim, "physics:body1"),
+            },
+            localMatrix: new Matrix4(),
+            worldMatrix: new Matrix4(),
+          });
+        });
+
+        Array.from(records.values())
+          .sort((a, b) => a.path.length - b.path.length)
+          .forEach((record) => {
+            record.localMatrix = getLocalTransform(record);
+            const parent = records.get(record.parentPath);
+            record.worldMatrix = parent
+              ? parent.worldMatrix.clone().multiply(record.localMatrix)
+              : record.localMatrix.clone();
+          });
+
+        return collectUsdPhysicsInfoFromRecords(records);
+      }
+
+      async function buildUsdHelpers(renderInterface) {
+        for (const group of Object.values(usdHelpers)) {
+          clearHelperGroup(group);
+          if (!group.parent) window.usdRoot.add(group);
+        }
+        usdLinkAxes.forEach((helper) => {
+          if (helper.parent) helper.parent.remove(helper);
+        });
+        usdLinkAxes = [];
+
+        const hydraMeshes = Object.values(renderInterface?.meshes || {});
+        const meshes = hydraMeshes
+          .map((hydraMesh) => {
+            const mesh = hydraMesh._mesh;
+            if (!mesh) return null;
+            mesh.userData.usdPath = hydraMesh._id;
+            return mesh;
+          })
+          .filter(Boolean);
+
+        if (!meshes.length) return;
+
+        const rootBox = getRootLocalBox(window.usdRoot);
+        const rootSize = rootBox.getSize(new Vector3());
+        const modelSize = Math.max(rootSize.x, rootSize.y, rootSize.z, 0.1);
+        const axisSize = Math.max(0.08, Math.min(modelSize * 0.18, 0.9));
+
+        const stagePhysicsInfo = collectUsdPhysicsInfo(window.usdStage);
+        const mountedStagePhysicsInfo = stagePhysicsInfo.rigidBodies.length
+          ? createEmptyPhysicsInfo()
+          : await collectUsdPhysicsInfoFromMountedStages();
+        const mountedTextPhysicsInfo = (stagePhysicsInfo.rigidBodies.length || mountedStagePhysicsInfo.rigidBodies.length)
+          ? createEmptyPhysicsInfo()
+          : collectUsdPhysicsInfoFromMountedFiles();
+        const extractedPhysicsInfo = mergePhysicsInfo(
+          mergePhysicsInfo(stagePhysicsInfo, mountedStagePhysicsInfo),
+          mountedTextPhysicsInfo
+        );
+        usdPhysicsInfo = inferPhysicsInfoFromMeshes(meshes, extractedPhysicsInfo);
+        const physicalRigidBodies = usdPhysicsInfo.rigidBodies.filter((body) => !body.inferred);
+
+        const collisionMaterial = new MeshBasicMaterial({
+          color: 0x00ff44,
+          transparent: true,
+          opacity: 0.45,
+          wireframe: true,
+          depthWrite: false,
+        });
+        meshes.forEach((mesh) => {
+          if (!isCollisionObject(mesh)) return;
+          const overlay = createCollisionOverlay(mesh, collisionMaterial);
+          if (overlay) usdHelpers.collision.add(overlay);
+        });
+
+        meshes.forEach((mesh) => {
+          if (isCollisionObject(mesh)) return;
+          const { maxDim } = getMeshCenterAndSize(mesh);
+          if (maxDim <= 1e-6) return;
+          const helper = createAxisHelper(Math.max(0.08, Math.min(maxDim * 0.8, axisSize)));
+          mesh.add(helper);
+          usdLinkAxes.push(helper);
+        });
+
+        usdPhysicsInfo.joints
+          .filter((joint) => joint.type !== "fixed")
+          .forEach((joint) => {
+          const arrow = createArrowHelper(joint.axis, axisSize * 1.8);
+          arrow.position.copy(new Vector3(...joint.origin));
+          usdHelpers.jointAxes.add(arrow);
+        });
+
+        const comGeometry = new SphereGeometry(Math.max(Math.min(modelSize * 0.012, 0.035), 0.008), 24, 16);
+        const comMaterial = new MeshBasicMaterial({
+          color: 0x36e8ff,
+          depthTest: false,
+          depthWrite: false,
+        });
+        physicalRigidBodies.forEach((body) => {
+          if (!body.centerOfMass.every(Number.isFinite) || !(body.mass > 0)) return;
+          const com = new Mesh(comGeometry, comMaterial);
+          const bodyMesh = findMeshForUsdPath(meshes, body.path);
+          com.position.copy(getBodyCenterOfMassRootLocal(body, bodyMesh));
+          com.userData.isUsdHelper = true;
+          com.renderOrder = 1100;
+          com.raycast = () => {};
+          usdHelpers.com.add(com);
+        });
+
+        const inertiaMaterial = new MeshPhongMaterial({
+          transparent: true,
+          opacity: 0.35,
+          shininess: 2.5,
+          premultipliedAlpha: true,
+          color: 0x4a9eff,
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+          polygonOffsetUnits: -1,
+          depthWrite: false,
+        });
+        physicalRigidBodies.forEach((body) => {
+          const boxData = computeInertiaBoxFromUsd(body);
+          if (!boxData) return;
+
+          const bodyMesh = findMeshForUsdPath(meshes, body.path);
+          const inertia = new Mesh(
+            new BoxGeometry(boxData.width, boxData.height, boxData.depth),
+            inertiaMaterial
+          );
+          inertia.position.copy(getBodyCenterOfMassRootLocal(body, bodyMesh));
+          inertia.quaternion.copy(getBodyRootRotation(body, bodyMesh).multiply(getInertiaPrincipalAxes(body)));
+          inertia.userData.isUsdHelper = true;
+          inertia.renderOrder = 1050;
+          inertia.raycast = () => {};
+          usdHelpers.inertia.add(inertia);
+        });
+
+        console.log("[USD Physics] Extracted:", {
+          primPhysicsAvailable: extractedPhysicsInfo.physicsAvailable,
+          stageJointCount: stagePhysicsInfo.joints.length,
+          stageRigidBodyCount: stagePhysicsInfo.rigidBodies.length,
+          stageCollisionCount: stagePhysicsInfo.collisions.length,
+          mountedStageJointCount: mountedStagePhysicsInfo.joints.length,
+          mountedStageRigidBodyCount: mountedStagePhysicsInfo.rigidBodies.length,
+          mountedStageCollisionCount: mountedStagePhysicsInfo.collisions.length,
+          mountedTextJointCount: mountedTextPhysicsInfo.joints.length,
+          mountedTextRigidBodyCount: mountedTextPhysicsInfo.rigidBodies.length,
+          mountedTextCollisionCount: mountedTextPhysicsInfo.collisions.length,
+          mountedJointCount: mountedStagePhysicsInfo.joints.length + mountedTextPhysicsInfo.joints.length,
+          mountedRigidBodyCount: mountedStagePhysicsInfo.rigidBodies.length + mountedTextPhysicsInfo.rigidBodies.length,
+          mountedCollisionCount: mountedStagePhysicsInfo.collisions.length + mountedTextPhysicsInfo.collisions.length,
+          finalRigidBodyCount: usdPhysicsInfo.rigidBodies.length,
+          finalCollisionCount: usdPhysicsInfo.collisions.length,
+          rigidBodiesWithInertia: physicalRigidBodies.filter((body) => computeInertiaBoxFromUsd(body)).length,
+          renderedInertiaCount: usdHelpers.inertia.children.length,
+          sampleCollisions: usdPhysicsInfo.collisions.slice(0, 8),
+          sampleRigidBodies: physicalRigidBodies.slice(0, 8).map(serializeRigidBody),
+        });
+
+        applyDisplayOptions();
+        post("USD_PRIM_INFO", {
+          primInfo: {
+            meshCount: meshes.length,
+            physicsAvailable: usdPhysicsInfo.physicsAvailable,
+            jointCount: usdPhysicsInfo.joints.length,
+            collisionMeshCount: usdPhysicsInfo.collisions.length,
+            comCount: usdHelpers.com.children.length,
+            inertiaCount: usdHelpers.inertia.children.length,
+            collisionHelperCount: usdHelpers.collision.children.length,
+            jointAxisCount: usdHelpers.jointAxes.children.length,
+            inferredRigidBodyCount: usdPhysicsInfo.rigidBodies.filter((body) => body.inferred).length,
+            inferredCollisionCount: usdPhysicsInfo.collisions.filter((collision) => collision.inferred).length,
+            joints: usdPhysicsInfo.joints,
+            rigidBodies: usdPhysicsInfo.rigidBodies.map(serializeRigidBody),
+            collisions: usdPhysicsInfo.collisions,
+          },
+        });
+      }
+
+      function setUsdJoint(jointName, value) {
+        const joint = usdPhysicsInfo.joints.find((item) => item.name === jointName || item.path === jointName);
+        if (!joint) return;
+
+        const body1Path = joint.body1;
+        const targetMeshes = Object.values(window.renderInterface?.meshes || {})
+          .map((hydraMesh) => hydraMesh._mesh)
+          .filter((mesh) => {
+            return body1Path && pathMatchesUsdPath(mesh?.userData?.usdPath || "", body1Path);
+          });
+        const matrix = new Matrix4().makeRotationAxis(new Vector3(...joint.axis).normalize(), value || 0);
+        const rootOrigin = new Vector3(...joint.origin);
+        targetMeshes.forEach((mesh) => {
+          if (!mesh.userData.usdBaseMatrix) {
+            mesh.userData.usdBaseMatrix = mesh.matrix.clone();
+          }
+          mesh.matrix.copy(mesh.userData.usdBaseMatrix);
+          const pivotToOrigin = new Matrix4().makeTranslation(-rootOrigin.x, -rootOrigin.y, -rootOrigin.z);
+          const pivotBack = new Matrix4().makeTranslation(rootOrigin.x, rootOrigin.y, rootOrigin.z);
+          mesh.matrix.premultiply(pivotToOrigin);
+          mesh.matrix.premultiply(matrix);
+          mesh.matrix.premultiply(pivotBack);
+          mesh.matrixAutoUpdate = false;
+        });
+        render();
       }
 
       // from https://discourse.threejs.org/t/camera-zoom-to-fit-object/936/24
@@ -361,10 +1568,6 @@ export function init(options = { container: null, hdrPath: null }) {
           return;
         }
 
-        camera.position.z = 7;
-        camera.position.y = 7;
-        camera.position.x = 0;
-
         const direction = controls.target
           .clone()
           .sub(camera.position)
@@ -406,6 +1609,13 @@ export function init(options = { container: null, hdrPath: null }) {
         usdRoot.name = "USD Root";
         scene.add(usdRoot);
 
+        const ambientLight = new AmbientLight(0xffffff, 1.2);
+        scene.add(ambientLight);
+
+        const keyLight = new DirectionalLight(0xffffff, 2.5);
+        keyLight.position.set(4, 6, 8);
+        scene.add(keyLight);
+
         const renderer = (window.renderer = new WebGLRenderer({
           antialias: true,
           alpha: true,
@@ -417,6 +1627,7 @@ export function init(options = { container: null, hdrPath: null }) {
         renderer.setSize(width, height);
         renderer.outputColorSpace = SRGBColorSpace;
         renderer.toneMapping = NeutralToneMapping;
+        renderer.toneMappingExposure = 1.4;
         renderer.shadowMap.enabled = false;
         renderer.shadowMap.type = VSMShadowMap;
         // Use transparent background, inherit parent page style
@@ -489,7 +1700,7 @@ export function init(options = { container: null, hdrPath: null }) {
           window.driver.Draw();
           render();
         }
-        requestAnimationFrame(animate.bind(null, timeout, endTimeCode));
+        requestAnimationFrame(animate);
       }
 
       function onWindowResize() {
@@ -542,7 +1753,7 @@ export function init(options = { container: null, hdrPath: null }) {
               true /* canOwn */
             );
 
-            loadUsdFile(directory, fileName, fullPath, isRootFile);
+            await loadUsdFile(directory, fileName, fullPath, isRootFile);
           };
 
           reader.readAsArrayBuffer(file);
@@ -759,7 +1970,7 @@ export function init(options = { container: null, hdrPath: null }) {
                 false /* canWrite */,
                 true /* canOwn */
               );
-              await loadUsdFile(
+              return await loadUsdFile(
                 mountDir,
                 fileNameOnly,
                 mountDir + fileNameOnly,
@@ -777,10 +1988,11 @@ export function init(options = { container: null, hdrPath: null }) {
                 window.__usdAssetBase = baseDir;
                 installFetchRewrite();
               } catch {}
-              await loadUsdFile(undefined, fileNameOnly, url, true);
+              return await loadUsdFile(undefined, fileNameOnly, url, true);
             }
           } catch (e) {
             console.warn("loadFromURL error", e);
+            throw e;
           }
         },
         // Load from array buffer entries mounted into the in-memory FS
@@ -788,10 +2000,14 @@ export function init(options = { container: null, hdrPath: null }) {
           try {
             if (!USD) await usdReady;
             clearStage();
+            if (!entries?.length) {
+              throw new Error("No USD files were provided");
+            }
             // Mount all entries first (order doesn't matter since we load the root explicitly last)
             const list = (entries || []).slice();
             for (const { path, buffer } of list) {
               const fileName = path.split("/").pop();
+              if (!fileName) continue;
               let dir = path.slice(0, path.length - (fileName?.length || 0));
               // Ensure dir is at least "/", cannot be empty string
               if (!dir || dir === "") {
@@ -803,6 +2019,11 @@ export function init(options = { container: null, hdrPath: null }) {
               }
               console.log('[USD] Mount file:', { path, fileName, dir });
               USD.FS_createPath("", dir, true, true);
+              const mountedPath = dir === "/" ? `/${fileName}` : toUsdFsPath(`${dir}/${fileName}`);
+              const existing = USD.FS_analyzePath(mountedPath);
+              if (existing?.exists) {
+                USD.FS_unlink(mountedPath, true);
+              }
               USD.FS_createDataFile(
                 dir,
                 fileName,
@@ -831,20 +2052,28 @@ export function init(options = { container: null, hdrPath: null }) {
                 list.find((e) => isUsdFile(e.path))?.path;
               console.log('[USD] Auto-detected root file:', root);
             }
-            if (root) {
-              const fileNameOnly = root.split("/").pop();
-              let dir = root.slice(0, root.length - (fileNameOnly?.length || 0));
-              if (!dir || dir === "") {
-                dir = "/";
-              }
-              if (dir.length > 1 && dir.endsWith("/")) {
-                dir = dir.slice(0, -1);
-              }
-              console.log('[USD] Load root file:', { root, dir, fileNameOnly });
-              await loadUsdFile(dir, fileNameOnly, root, true);
+            if (!root) {
+              throw new Error("No USD root file found");
             }
+
+            const fileNameOnly = root.split("/").pop();
+            if (!fileNameOnly) {
+              throw new Error(`Invalid USD root path: ${root}`);
+            }
+
+            let dir = root.slice(0, root.length - fileNameOnly.length);
+            if (!dir || dir === "") {
+              dir = "/";
+            }
+            if (dir.length > 1 && dir.endsWith("/")) {
+              dir = dir.slice(0, -1);
+            }
+            const rootPath = toUsdFsPath(root);
+            console.log('[USD] Load root file:', { root, rootPath, dir, fileNameOnly });
+            return await loadUsdFile(dir, fileNameOnly, rootPath, true);
           } catch (e) {
             console.warn("loadFromEntries error", e);
+            throw e;
           }
         },
         // Load from a DataTransfer (e.g., from a drag/drop event)
@@ -900,6 +2129,12 @@ export function init(options = { container: null, hdrPath: null }) {
           } catch (e) {
             console.warn("loadFromFilesMap error", e);
           }
+        },
+        setDisplayOptions: (options) => {
+          applyDisplayOptions(options || {});
+        },
+        setJoint: (jointName, value) => {
+          setUsdJoint(jointName, value);
         },
         // Clear the current stage
         clear: () => {
@@ -962,7 +2197,7 @@ document.body.appendChild(container);
 
 function post(type, payload = {}) {
   try {
-    parent.postMessage({ type, ...payload }, "*");
+    parent.postMessage({ type, ...payload }, window.location.origin);
   } catch {}
 }
 
@@ -970,7 +2205,7 @@ async function bootstrap() {
   try {
     handle = await init({
       container,
-      hdrPath: "/usd-viewer/environments/neutral.hdr",
+      hdrPath: getUsdViewerUrl("environments/neutral.hdr"),
     });
   } catch (e) {
     console.warn("[USD Iframe] init error", e);
@@ -982,36 +2217,46 @@ async function bootstrap() {
 // helper to load entries [{ path, buffer(ArrayBuffer) }, ...]
 async function loadFromEntries(entries, primaryPath) {
   try {
-    if (!handle?.loadFromEntries) return;
-    await handle.loadFromEntries(entries, primaryPath);
+    if (!handle?.loadFromEntries) {
+      throw new Error("USD viewer is not initialized");
+    }
+    return await handle.loadFromEntries(entries, primaryPath);
   } catch (e) {
     console.warn("[USD Iframe] loadFromEntries error", e);
+    throw e;
   }
 }
 
 window.addEventListener("message", async (evt) => {
+  if (evt.origin !== window.location.origin) return;
+
   const data = evt.data;
   if (!data || typeof data !== "object") return;
   try {
     switch (data.type) {
       case "USD_LOAD_URL":
         post("USD_LOADING_START");
-        await handle?.loadFromURL?.(data.url);
-        post("USD_LOADED");
+        post("USD_LOADED", await handle?.loadFromURL?.(data.url));
         break;
       case "USD_CLEAR":
         await handle?.clear?.();
         break;
       case "USD_LOAD_ENTRIES":
         post("USD_LOADING_START");
-        await loadFromEntries(data.entries || [], data.primaryPath);
-        post("USD_LOADED");
+        post("USD_LOADED", await loadFromEntries(data.entries || [], data.primaryPath));
+        break;
+      case "USD_SET_DISPLAY_OPTIONS":
+        handle?.setDisplayOptions?.(data.options || {});
+        break;
+      case "USD_SET_JOINT":
+        handle?.setJoint?.(data.jointName, data.value);
         break;
       default:
         break;
     }
   } catch (e) {
     console.warn("[USD Iframe] message error", e);
+    post("USD_ERROR", { error: e?.message || String(e) });
   }
 });
 

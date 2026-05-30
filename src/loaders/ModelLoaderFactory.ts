@@ -913,7 +913,9 @@ export class ModelLoaderFactory {
 
         // Call corresponding adapter based on model type
         // URDF format: joint.threeObject is URDFJoint object, has setJointValue or setAngle method
-        if (joint.threeObject && (typeof joint.threeObject.setJointValue === 'function' || typeof joint.threeObject.setAngle === 'function')) {
+        if (model.userData?.isUSDWASM) {
+            USDAdapter.setJointAngle(joint, angle);
+        } else if (joint.threeObject && (typeof joint.threeObject.setJointValue === 'function' || typeof joint.threeObject.setAngle === 'function')) {
             URDFAdapter.setJointAngle(joint, angle, ignoreLimits);
         } else {
             // MJCF or USD format

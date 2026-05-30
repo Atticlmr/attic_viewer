@@ -24,14 +24,19 @@ let warningMessagesToCount = new Map();
 /** @type {MeshPhysicalMaterial} */
 let defaultMaterial;
 
+export function clearHydraWarnings() {
+  warningMessagesToCount.clear();
+}
+
 export class HydraMesh {
   /**
    * @param {string} id
    * @param {import('./ThreeRenderDelegateInterface.js').ThreeRenderDelegateInterface} hydraInterface
    */
-  constructor(id, hydraInterface) {
+  constructor(id, hydraInterface, instancerId = null) {
     this._geometry = new BufferGeometry();
     this._id = id;
+    this._instancerId = instancerId;
     this._interface = hydraInterface;
     this._points = undefined;
     this._normals = undefined;
@@ -39,6 +44,9 @@ export class HydraMesh {
     this._uvs = undefined;
     this._indices = undefined;
     this._materials = [];
+    this._geomSubsetSections = [];
+    this._transformUpdates = 0;
+    this._lastTransformValues = null;
 
     let material = new MeshPhysicalMaterial({
       side: DoubleSide,
@@ -91,6 +99,7 @@ export class HydraMesh {
       this.updateOrder(this._uvs, "uv", 2);
       this._geometry.attributes.uv2 = this._geometry.attributes.uv;
     }
+    this._syncGeomSubsetMaterials();
   }
 
   /**
@@ -98,8 +107,26 @@ export class HydraMesh {
    * @param {Iterable<number>} matrix - The 4x4 matrix to set on the mesh.
    */
   setTransform(matrix) {
-    this._mesh.matrix.set(...matrix);
-    this._mesh.matrix.transpose();
+    const values = Array.from(matrix);
+    if (values.length < 16) {
+      console.warn("Invalid transform matrix for USD mesh:", this._id, matrix);
+      return;
+    }
+
+    this._transformUpdates++;
+    this._lastTransformValues = values;
+
+    const columnMajorTranslation =
+      Math.abs(values[12]) + Math.abs(values[13]) + Math.abs(values[14]);
+    const rowMajorTranslation =
+      Math.abs(values[3]) + Math.abs(values[7]) + Math.abs(values[11]);
+
+    const epsilon = 1e-9;
+    if (rowMajorTranslation > epsilon && columnMajorTranslation < epsilon) {
+      this._mesh.matrix.set(...values);
+    } else {
+      this._mesh.matrix.fromArray(values);
+    }
     this._mesh.matrixAutoUpdate = false;
   }
 
@@ -133,7 +160,8 @@ export class HydraMesh {
     if (DEBUG.materials) console.log("Setting material:", materialId);
     const material = this._interface.materials[materialId];
     if (material) {
-      this._mesh.material = material._material;
+      this._materials[0] = material._material;
+      this._syncGeomSubsetMaterials();
     } else {
       console.error("Material not found:", materialId);
     }
@@ -142,34 +170,96 @@ export class HydraMesh {
   setGeomSubsetMaterial(sections) {
     //console.log("setting subset material: ", this._id, sections)
 
-    for (let i = 0; i < sections.length; i++) {
-      const section = sections[i];
-      if (this._interface.materials[section.materialId]) {
-        this._materials.push(
-          this._interface.materials[section.materialId]._material
-        );
-        this._geometry.addGroup(section.start, section.length, i + 1);
-      }
+    this._geomSubsetSections = Array.isArray(sections) ? sections.slice(0) : [];
+    this._syncGeomSubsetMaterials();
+  }
+
+  _getDrawCount() {
+    if (this._geometry.index) return this._geometry.index.count;
+
+    const position = this._geometry.getAttribute("position");
+    if (position) return position.count;
+
+    return this._indices?.length || 0;
+  }
+
+  _syncGeomSubsetMaterials() {
+    if (!this._geomSubsetSections.length) {
+      this._geometry.clearGroups();
+      this._mesh.material = this._materials[0];
+      return;
     }
-    this._mesh = new Mesh(this._geometry, this._materials);
-    this._interface.config.usdRoot.add(this._mesh);
+
+    const materials = [this._materials[0]];
+    const drawCount = this._getDrawCount();
+    const sections = [];
+
+    for (const section of this._geomSubsetSections) {
+      const material = this._interface.materials[section.materialId];
+      if (!material || section.length <= 0) continue;
+
+      const start = Math.max(0, section.start);
+      const length = Math.max(0, section.length);
+      const end = drawCount > 0 ? Math.min(drawCount, start + length) : start + length;
+      if (end <= start) continue;
+
+      sections.push({
+        start,
+        end,
+        materialIndex: materials.length,
+      });
+      materials.push(material._material);
+    }
+
+    this._geometry.clearGroups();
+
+    if (!sections.length) {
+      this._materials = materials;
+      this._mesh.material = materials[0];
+      return;
+    }
+
+    sections.sort((a, b) => a.start - b.start);
+
+    let cursor = 0;
+    for (const section of sections) {
+      const start = Math.max(cursor, section.start);
+      const end = Math.max(start, section.end);
+
+      if (drawCount > 0 && start > cursor) {
+        this._geometry.addGroup(cursor, start - cursor, 0);
+      }
+      if (end > start) {
+        this._geometry.addGroup(start, end - start, section.materialIndex);
+      }
+
+      cursor = Math.max(cursor, end);
+    }
+
+    if (drawCount > 0 && cursor < drawCount) {
+      this._geometry.addGroup(cursor, drawCount - cursor, 0);
+    }
+
+    this._materials = materials;
+    this._mesh.material = materials.length > 1 ? materials : materials[0];
   }
 
   setDisplayColor(data, interpolation) {
     if (DISABLE_MATERIALS) return;
 
-    const wasDefaultMaterial = this._mesh.material === defaultMaterial;
+    const wasDefaultMaterial = this._materials[0] === defaultMaterial;
     if (wasDefaultMaterial) {
-      this._mesh.material = this._mesh.material.clone();
+      this._materials[0] = this._materials[0].clone();
+      this._syncGeomSubsetMaterials();
     }
 
     this._colors = null;
 
     if (interpolation === "constant") {
-      this._mesh.material.color = new Color().fromArray(data);
+      this._materials[0].color = new Color().fromArray(data);
     } else if (interpolation === "vertex") {
-      this._mesh.material.vertexColors = true;
-      if (wasDefaultMaterial) this._mesh.material.color = new Color(0xffffff);
+      this._materials[0].vertexColors = true;
+      if (wasDefaultMaterial) this._materials[0].color = new Color(0xffffff);
       this._colors = data.slice(0);
       this.updateOrder(this._colors, "color");
     } else {
@@ -237,7 +327,8 @@ export class HydraMesh {
 
   updatePoints(points) {
     this._points = points.slice(0);
-    this.updateOrder(this._points, "position")
+    this.updateOrder(this._points, "position");
+    this._syncGeomSubsetMaterials();
   }
 
   commit() {

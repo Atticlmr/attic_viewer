@@ -52,6 +52,10 @@ declare global {
           getEnvironmentMap?: () => THREE.Texture | null;
         };
       };
+      usdViewerManager?: {
+        setDisplayOptions?: (options: Record<string, boolean>) => void;
+        setJointAngle?: (jointName: string, value: number) => void;
+      };
       mujocoSimulationManager?: {
         hasScene?: () => boolean;
         mujocoRoot?: THREE.Object3D;

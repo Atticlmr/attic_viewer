@@ -86,31 +86,55 @@ export class ModelHandler {
     handleUSDWASMModel(model: ViewerModel, file: File): boolean {
         const canvas = document.getElementById('canvas');
         const usdContainer = document.getElementById('usd-viewer-container');
+        const snapshot = document.getElementById('canvas-snapshot');
+
+        if (snapshot?.parentNode) {
+            snapshot.parentNode.removeChild(snapshot);
+        }
 
         if (canvas && usdContainer) {
             canvas.style.display = 'none';
             usdContainer.style.display = 'block';
         }
 
-        this.hideJointControls();
-        this.hideGraphPanel();
-
         this.app.state.currentModel = model;
+        if (this.app.sceneManager) {
+            this.app.sceneManager.currentModel = model;
+        }
+        this.setupUSDModel(model);
+        this.app.usdViewerManager?.setDisplayOptions?.(this.getCurrentUSDDisplayOptions());
+        this.hideGraphPanel();
         this.updateModelInfo(model, file);
 
-        const snapshot = document.getElementById('canvas-snapshot');
-        if (snapshot?.parentNode) {
-            snapshot.parentNode.removeChild(snapshot);
-        }
-
         return true;
+    }
+
+    setupUSDModel(model: ViewerModel): void {
+        this.app.sceneManager.setGroundVisible(true);
+        this.app.jointControlsUI.setupJointControls(model);
+
+        const jointsPanel = document.getElementById('joints-panel');
+        if (jointsPanel) jointsPanel.style.display = 'block';
+
+        this.app.setAxesButtonState(false);
+    }
+
+    getCurrentUSDDisplayOptions(): Record<string, boolean> {
+        return {
+            visual: document.getElementById('show-visual')?.classList.contains('active') ?? true,
+            collision: document.getElementById('show-collision')?.classList.contains('active') ?? false,
+            com: document.getElementById('show-com')?.classList.contains('active') ?? false,
+            inertia: document.getElementById('show-inertia')?.classList.contains('active') ?? false,
+            axes: document.getElementById('toggle-axes-btn')?.classList.contains('active') ?? false,
+            jointAxes: document.getElementById('toggle-joint-axes-btn')?.classList.contains('active') ?? false
+        };
     }
 
     /**
      * Hide joint controls panel
      */
     hideJointControls(): void {
-        const jointPanel = document.getElementById('joint-controls-panel');
+        const jointPanel = document.getElementById('floating-joints-panel');
         if (jointPanel) {
             jointPanel.style.display = 'none';
         }
@@ -120,7 +144,7 @@ export class ModelHandler {
      * Hide graph panel
      */
     hideGraphPanel(): void {
-        const graphPanel = document.getElementById('graph-panel');
+        const graphPanel = document.getElementById('floating-model-tree');
         if (graphPanel) {
             graphPanel.style.display = 'none';
         }
@@ -130,8 +154,8 @@ export class ModelHandler {
      * Restore joint controls and graph display
      */
     restorePanels(): void {
-        const jointPanel = document.getElementById('joint-controls-panel');
-        const graphPanel = document.getElementById('graph-panel');
+        const jointPanel = document.getElementById('floating-joints-panel');
+        const graphPanel = document.getElementById('floating-model-tree');
         if (jointPanel) jointPanel.style.display = '';
         if (graphPanel) graphPanel.style.display = '';
     }
@@ -382,6 +406,11 @@ export class ModelHandler {
      * Open code editor
      */
     openEditor(file: File): void {
+        const ext = file.name.split('.').pop()?.toLowerCase() || '';
+        if (['usd', 'usdc', 'usdz'].includes(ext)) {
+            return;
+        }
+
         const editorPanel = document.getElementById('code-editor-panel');
         if (editorPanel && this.app.codeEditorManager) {
             editorPanel.classList.add('visible');

@@ -2,12 +2,13 @@
  * USD Adapter
  * All USD formats use OpenUSD WASM loader (rendered in separate iframe)
  */
-import { UnifiedRobotModel, Link, Joint, JointLimits, VisualGeometry, CollisionGeometry, InertialProperties, GeometryType } from '../models/UnifiedRobotModel.js';
+import { UnifiedRobotModel, Link, VisualGeometry, GeometryType } from '../models/UnifiedRobotModel.js';
 import * as THREE from 'three';
 
 interface USDViewerManagerLike {
     loadFromFilesMap(files: Record<string, File>, primaryPath: string): Promise<void>;
     loadFromFile(file: File): Promise<void>;
+    setJointAngle?(jointName: string, value: number): void;
 }
 
 interface USDParseOptions {
@@ -66,12 +67,9 @@ export class USDAdapter {
                 for (const [path, f] of fileMap.entries()) {
                     filesMapObj[path] = f;
                 }
-                // Find primary USD file (exclude files in .thumbs directory and Props directory)
                 let primaryPath = file.name;
-                for (const [path] of fileMap.entries()) {
-                    if (path.endsWith(file.name) &&
-                        !path.includes('/.thumbs/') &&
-                        !path.includes('/Props/')) {
+                for (const [path, mappedFile] of fileMap.entries()) {
+                    if (mappedFile === file) {
                         primaryPath = path;
                         break;
                     }
@@ -86,6 +84,8 @@ export class USDAdapter {
             model.userData = model.userData || {};
             model.userData.isUSDWASM = true;
             model.userData.usdViewerManager = usdViewerManager;
+            model.threeObject = this.createUSDProxyScene(model.name, usdViewerManager);
+            model.threeObject.userData.type = 'usd';
 
             return model;
 
@@ -93,6 +93,32 @@ export class USDAdapter {
             console.error('USD loading failed:', error);
             throw error;
         }
+    }
+
+    /**
+     * Create a lightweight main-scene proxy so existing UI code has a model object
+     * to attach controls to while the real USD render stays in the iframe.
+     */
+    static createUSDProxyScene(name: string, usdViewerManager: USDViewerManagerLike): THREE.Group {
+        const root = new THREE.Group();
+        root.name = name;
+        root.userData = {
+            type: 'usd',
+            isUSDProxy: true,
+            usdViewerManager
+        };
+        root.visible = false;
+        return root;
+    }
+
+    static setJointAngle(joint: any, angle: number): void {
+        joint.currentValue = angle;
+        const modelRoot = joint.threeObject as THREE.Object3D & {
+            userData?: {
+                usdViewerManager?: USDViewerManagerLike;
+            };
+        };
+        modelRoot?.userData?.usdViewerManager?.setJointAngle?.(joint.name, angle);
     }
 
     /**
@@ -414,19 +440,4 @@ export class USDAdapter {
         return new THREE.Mesh(threeGeometry, material);
     }
 
-    /**
-     * Set joint angle
-     */
-    static setJointAngle(joint, angle) {
-        joint.currentValue = angle;
-
-        if (joint.threeObject) {
-            if (joint.type === 'revolute' || joint.type === 'continuous') {
-                const axis = new THREE.Vector3(...joint.axis.xyz).normalize();
-                joint.threeObject.rotation.setFromAxisAngle(axis, angle);
-                // Update matrix
-                joint.threeObject.updateMatrixWorld(true);
-            }
-        }
-    }
 }

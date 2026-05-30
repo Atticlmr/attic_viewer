@@ -24,18 +24,20 @@
     </style>
 </head>
 <body>
-    <iframe id="usd-frame" src="/usd-viewer/usd.html"></iframe>
+    <iframe id="usd-frame" src="./usd-viewer/usd.html"></iframe>
     <script>
-        // Simple message forwarding
+        // Same-origin message forwarding between the app and the USD viewer.
         const iframe = document.getElementById('usd-frame');
+        const allowedOrigin = window.location.origin;
         window.addEventListener('message', (e) => {
+            if (e.origin !== allowedOrigin) return;
+
             if (e.source === iframe.contentWindow) {
-                parent.postMessage(e.data, '*');
-            } else if (e.source === parent) {
-                iframe.contentWindow.postMessage(e.data, '*');
+                parent.postMessage(e.data, allowedOrigin);
+            } else if (e.source === parent && iframe.contentWindow) {
+                iframe.contentWindow.postMessage(e.data, allowedOrigin);
             }
         });
     </script>
 </body>
 </html>
-

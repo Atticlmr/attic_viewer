@@ -33,10 +33,15 @@ export class FileHandler {
         const meshExts = ['dae', 'stl', 'obj', 'collada'];
 
         if (modelExts.includes(ext)) {
-            // Robot model file, load model and load into editor
+            // Robot model file, load model
             this.app.fileHandler.loadFile(fileInfo.file);
 
-            // If editor is open, auto-load file into editor
+            // Binary USD files are not useful in the text editor.
+            if (['usd', 'usdc', 'usdz'].includes(ext)) {
+                return;
+            }
+
+            // If editor is open, auto-load text model files into editor
             const editorPanel = document.getElementById('code-editor-panel');
             if (editorPanel && editorPanel.classList.contains('visible') && this.app.codeEditorManager) {
                 this.app.codeEditorManager.loadFile(fileInfo.file);

@@ -1,177 +1,40 @@
-# AGENTS.md - Developer Guide
+# Repository Guidelines
 
-## Project Overview
+## Project Structure & Module Organization
 
-Robot Viewer - A web-based 3D robot model viewer supporting URDF, MJCF, and USD formats. Built with TypeScript, Vite, Three.js, and Vitest.
+This repository is a Vite/TypeScript web app for viewing robot models in URDF, MJCF, and USD formats. Source lives in `src/`: `app/` contains application orchestration, `controllers/` handles user workflows, `adapters/` and `converters/` handle model formats, `loaders/` reads files, `renderer/` owns Three.js rendering, and `ui/` plus `views/` contain interface code. Shared types are in `src/types/`, utilities in `src/utils/`, and test helpers in `src/test/`. Static USD viewer assets are under `public/usd-viewer/`.
 
-## Build Commands
+Tests are colocated with source as `*.test.ts`, for example `src/app/AppState.test.ts` and `src/converters/URDFToMJCF.test.ts`.
+
+## Build, Test, and Development Commands
+
+Use pnpm, as declared by `packageManager`.
 
 ```bash
-# Development
-pnpm dev              # Start dev server on port 3000
-
-# Build
-pnpm build            # Production build to dist/
-pnpm preview          # Preview production build
-
-# Type Checking
-pnpm typecheck        # Run TypeScript type checking (noEmit)
-
-# Testing
-pnpm test             # Run all tests once
-pnpm test:watch       # Run tests in watch mode
-pnpm test:ui         # Run tests with Vitest UI
-pnpm test:coverage   # Run tests with coverage report
-
-# Running a Single Test
-pnpm vitest run --testNamePattern "should create empty state"
-pnpm vitest run src/app/AppState.test.ts
+pnpm dev            # Start the Vite dev server
+pnpm build          # Build production assets into dist/
+pnpm preview        # Preview the production build locally
+pnpm typecheck      # Run TypeScript without emitting files
+pnpm test           # Run Vitest once
+pnpm test:watch     # Run Vitest in watch mode
+pnpm test:coverage  # Generate coverage with Vitest/V8
 ```
 
-## Code Style Guidelines
+Run targeted tests with `pnpm vitest run src/path/file.test.ts` or `pnpm vitest run --testNamePattern "case name"`.
 
-### TypeScript Configuration
+## Coding Style & Naming Conventions
 
-- Target: ES2020
-- Module: ESNext
-- Strict mode is **disabled** (`strict: false`)
-- Use `any` types when necessary - the codebase uses loose TypeScript
-- Use `.js` extension in imports even for `.ts` files (e.g., `import from './AppState.js'`)
+Write TypeScript with 4-space indentation, semicolons, single quotes, and K&R braces. Imports between local TypeScript files should use `.js` extensions, such as `import { AppState } from './AppState.js';`. Prefer project aliases like `@/renderer/SceneManager.js` where existing code uses them.
 
-### Imports
+Use PascalCase for classes and class files (`SceneManager.ts`), camelCase for methods and variables, and an underscore prefix for private/internal members such as `_dirty`. Strict TypeScript is disabled, so follow existing loose typing patterns when integrating with external model libraries.
 
-```typescript
-// Use .js extension even for TypeScript files
-import { AppState } from './AppState.js';
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+## Testing Guidelines
 
-// Use path aliases
-import { SceneManager } from '@/renderer/SceneManager.js';
-```
+Tests use Vitest with `describe`, `it`, `expect`, and setup helpers such as `beforeEach`. Keep tests near the code they cover and name them `*.test.ts`. Add focused coverage for converters, adapters, loaders, and state changes when behavior changes. Run `pnpm test` and `pnpm typecheck` before opening a pull request.
 
-### Naming Conventions
+## Commit & Pull Request Guidelines
 
-- **Classes**: PascalCase (e.g., `SceneManager`, `AppState`)
-- **Methods**: camelCase (e.g., `addModel()`, `setJointAngle()`)
-- **Private members**: Prefix with underscore (e.g., `_dirty`, `_eventListeners`)
-- **Constants**: camelCase (e.g., `maxDim`, `cameraDistance`)
-- **Files**: PascalCase for classes (e.g., `SceneManager.ts`), camelCase otherwise
+Recent history uses short imperative commits, often with release prefixes when appropriate, for example `Fix MJCF parsing compatibility` or `release: v1.3.0`. Keep commits focused on one logical change.
 
-### Class Structure
+Pull requests should include a concise summary, test results, linked issues when relevant, and screenshots or screen recordings for visible UI or rendering changes. Note any model-format fixtures or assets used to validate URDF, MJCF, or USD behavior.
 
-```typescript
-/**
- * ClassName - Brief description
- * More details if needed
- */
-export class ClassName {
-    // Public properties
-    canvas: any;
-    
-    // Private properties (prefix with _)
-    _dirty: boolean;
-    
-    constructor(canvas: any) {
-        // Initialize properties
-    }
-
-    // Use JSDoc for public methods
-    /**
-     * Method description
-     * @param paramName - Description
-     */
-    publicMethod(param) {
-        // implementation
-    }
-
-    // Section dividers for organization
-    // ==================== Render Loop ====================
-}
-```
-
-### Formatting
-
-- **Indentation**: 4 spaces (not tabs)
-- **Line length**: No strict limit, but keep reasonably short
-- **Semicolons**: Yes
-- **Quotes**: Single quotes preferred
-- **Trailing commas**: Where appropriate
-- **Braces**: K&R style (opening brace on same line)
-
-### Error Handling
-
-```typescript
-// Use try-catch for operations that may fail
-try {
-    const bbox = new THREE.Box3().setFromObject(model.threeObject);
-} catch (error) {
-    // Failed to calculate model size, using default
-}
-
-// Use console.warn for recoverable issues
-console.warn('URDF model missing links or joints information');
-
-// Use console.error for critical failures
-console.error('Failed to parse URDF XML inertial data:', error);
-```
-
-### Testing
-
-- Use Vitest with `describe`, `it`, `expect`, `beforeEach`
-- Test files: `*.test.ts` in same directory as source
-- Include: `src/**/*.test.ts`
-
-```typescript
-import { describe, it, expect, beforeEach } from 'vitest';
-import { AppState } from './AppState.js';
-
-describe('AppState', () => {
-    let state: AppState;
-
-    beforeEach(() => {
-        state = new AppState();
-    });
-
-    it('should create empty state', () => {
-        expect(state.currentModel).toBeNull();
-    });
-});
-```
-
-### File Organization
-
-```
-src/
-├── app/           # Application core (App.ts, AppState.ts)
-├── adapters/      # Model format adapters (URDF, MJCF, USD)
-├── controllers/   # Controller classes
-├── loaders/       # File loading logic
-├── models/        # Data models
-├── renderer/      # Three.js rendering (SceneManager, etc.)
-├── ui/            # UI components
-├── utils/         # Utility functions
-└── views/         # View components
-```
-
-### Common Patterns
-
-- **Event System**: Simple callback-based events in managers
-- **Managers**: Central classes (SceneManager, EnvironmentManager) that coordinate specialized tasks
-- **Adapters**: Convert between different model formats to unified format
-- **Model References**: Store threeObject for Three.js access, links/joints as Maps
-
-### Dependencies
-
-- **three**: 3D rendering
-- **urdf-loader**: URDF file loading
-- **mujoco-js**: MuJoCo simulation
-- **xacro-parser**: XACRO preprocessing
-- **codemirror**: Code editor
-
-### Development Notes
-
-- Dev server runs on port 3000
-- USD viewer requires COOP/COEP headers (configured in vite.config.js)
-- Use `ignoreLimits` flag to bypass joint limits during drag operations
-- On-demand rendering: use `redraw()` to mark scene as needing render

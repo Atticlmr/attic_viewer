@@ -4,6 +4,8 @@
 (function() {
     console.log('[USD Error Handler] Error handler loaded');
 
+    const targetOrigin = window.location.origin;
+
     // Capture all errors
     window.addEventListener('error', (event) => {
         console.error('[USD Error Handler] Error captured:', event.error || event.message);
@@ -11,7 +13,7 @@
             parent.postMessage({
                 type: 'USD_ERROR',
                 error: event.error?.message || event.message || 'Unknown error'
-            }, '*');
+            }, targetOrigin);
         } catch (e) {
             console.error('[USD Error Handler] Failed to send error message:', e);
         }
@@ -24,7 +26,7 @@
             parent.postMessage({
                 type: 'USD_ERROR',
                 error: event.reason?.message || String(event.reason) || 'Promise rejection'
-            }, '*');
+            }, targetOrigin);
         } catch (e) {
             console.error('[USD Error Handler] Failed to send error message:', e);
         }
@@ -43,7 +45,7 @@
                         parent.postMessage({
                             type: 'USD_ERROR',
                             error: e.message || 'Message processing failed'
-                        }, '*');
+                        }, targetOrigin);
                     } catch (err) {
                         console.error('[USD Error Handler] Failed to send error message:', err);
                     }
@@ -54,4 +56,3 @@
         return originalAddEventListener.call(this, type, listener, ...args);
     };
 })();
-

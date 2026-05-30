@@ -8,7 +8,7 @@
     <meta name="keywords" content="USD, Hydra, Three.js" />
     <meta name="author" content="jurmy24" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=no, shrink-to-fit=0" />
-    <link rel="icon" type="image/x-icon" href="/favicon.png" />
+    <link rel="icon" type="image/x-icon" href="../favicon.png" />
   </head>
 
   <body style="margin:0px; padding:0px; width:100%; height:100vh; overflow:hidden;
@@ -24,8 +24,8 @@
     <!-- Import maps for three.js - use local version to avoid COEP issues -->
     <script type="importmap">
       {"imports": {
-        "three": "/node_modules/three/build/three.module.js",
-        "three/addons/": "/node_modules/three/examples/jsm/"
+        "three": "./vendor/three/build/three.module.js",
+        "three/addons/": "./vendor/three/examples/jsm/"
       }}
     </script>
     <!-- Error handler - must be loaded before main.js -->
@@ -33,4 +33,3 @@
     <script type="module" src="main.js"></script>
   </body>
 </html>
-

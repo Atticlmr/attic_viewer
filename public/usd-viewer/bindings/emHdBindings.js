@@ -7491,7 +7491,9 @@ var getUsdModule = ((args) => {
       }
       return false;
     }
-    var ENV = {};
+    var ENV = {
+      PCP_OVERRIDE_INSTANCEABLE: "0",
+    };
     var getExecutableName = () => thisProgram || "./this.program";
     var getEnvStrings = () => {
       if (!getEnvStrings.strings) {
