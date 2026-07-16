@@ -10,10 +10,13 @@
 - 对齐 Three.js 运行时与类型版本，修复 USDZLoader 类型差异，并升级存在安全公告的 YAML 传递依赖。
 - 增加加载竞态和资源释放回归测试，在部署与发布工作流中加入类型检查和测试门禁。
 
-### Next: 1.4.0
+## 2.0.0 - 2026-07-16
 
-- 计划将 MuJoCo WebAssembly 依赖从旧包名 `mujoco-js` 迁移到 Google DeepMind 官方正式包 `@mujoco/mujoco`。
-- 迁移将覆盖独立 WASM 资源加载、正式 TypeScript 类型、MJCF 兼容性、仿真步进、拖拽交互和资源释放回归验证。
+- 将 MuJoCo WebAssembly 从旧包 `mujoco-js` 迁移到 Google DeepMind 官方 `@mujoco/mujoco` 3.10，并使用官方 TypeScript 类型和 `MjModel` / `MjData` API。
+- 将 MuJoCo WASM 作为独立资源按需加载，兼容开发环境、生产构建和子路径静态部署。
+- 支持加载 `.mjcf` 后缀，并在文件选择器、文件树、加载器和仿真入口中统一 MJCF 格式判断。
+- 使用固定步长累加器驱动物理仿真，修复帧间隔超过 35ms 时引擎不执行步进的问题。
+- 按官方 Embind 生命周期要求释放 `MjData` 和 `MjModel`，增加初始化、步进、重置和释放回归测试。
 
 ## 1.3.2
 

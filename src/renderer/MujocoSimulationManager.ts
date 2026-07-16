@@ -4,6 +4,8 @@
  * Does not use iframe, runs in the same rendering layer
  */
 import * as THREE from 'three';
+import mujocoWasmUrl from '@mujoco/mujoco/mujoco.wasm?url';
+import type { MainModule, MjData, MjModel } from '@mujoco/mujoco';
 import type { UnifiedRobotModel } from '../models/UnifiedRobotModel.js';
 import { DragStateManager } from '../utils/DragStateManager.js';
 import { MathUtils } from '../utils/MathUtils.js';
@@ -13,117 +15,9 @@ import { VisualizationManager } from './VisualizationManager.js';
 import type { SceneManager } from './SceneManager.js';
 import { disposeObject3D } from '../utils/ThreeDisposal.js';
 
-type NumericArrayLike = ArrayLike<number>;
-type MutableNumericArrayLike = { length: number; [index: number]: number };
-type BinaryArrayLike = Float32Array | Uint8Array | Uint16Array | Uint32Array | Int32Array;
 type BodyGroup = THREE.Group & { bodyID?: number };
-
-interface MujocoEnumValue {
-    value: number;
-}
-
-interface MujocoFSLike {
-    mkdir(path: string): void;
-    mount(fs: unknown, options: { root: string }, path: string): void;
-    writeFile(path: string, data: string | Uint8Array): void;
-    stat(path: string): { mode: number };
-    analyzePath(path: string): { exists: boolean };
-    readdir(path: string): string[];
-    unlink(path: string): void;
-    rmdir(path: string): void;
-    isDir(mode: number): boolean;
-}
-
-interface MujocoModelLike {
-    names: ArrayBuffer | ArrayLike<number>;
-    ngeom: number;
-    nbody: number;
-    njnt: number;
-    geom_group: NumericArrayLike;
-    geom_bodyid: NumericArrayLike;
-    geom_type: NumericArrayLike;
-    geom_size: NumericArrayLike;
-    geom_dataid: NumericArrayLike;
-    geom_rgba: NumericArrayLike;
-    geom_pos: NumericArrayLike;
-    geom_quat: NumericArrayLike;
-    name_bodyadr: NumericArrayLike;
-    name_meshadr: NumericArrayLike;
-    body_mass: NumericArrayLike;
-    body_ipos: NumericArrayLike;
-    body_iquat?: NumericArrayLike;
-    body_inertia: NumericArrayLike;
-    jnt_type: NumericArrayLike;
-    jnt_bodyid: NumericArrayLike;
-    jnt_axis: NumericArrayLike;
-    jnt_pos: NumericArrayLike;
-    mesh_vert: Float32Array;
-    mesh_vertadr: NumericArrayLike;
-    mesh_vertnum: NumericArrayLike;
-    mesh_normal: Float32Array;
-    mesh_face: Uint16Array | Uint32Array | Int32Array;
-    mesh_faceadr: NumericArrayLike;
-    mesh_facenum: NumericArrayLike;
-    opt: {
-        timestep: number;
-    };
-    getOptions?: () => { timestep: number };
-    delete?: () => void;
-}
-
-interface MujocoSimulationLike {
-    resetData(): void;
-    forward(): void;
-    step(): void;
-    free?(): void;
-    xpos: NumericArrayLike;
-    xquat: NumericArrayLike;
-}
-
-interface MujocoDataLike {
-    qfrc_applied: MutableNumericArrayLike;
-    xpos: NumericArrayLike;
-    xquat: NumericArrayLike;
-    delete?: () => void;
-}
-
-interface MujocoModuleLike {
-    FS: MujocoFSLike;
-    MEMFS: unknown;
-    Model?: {
-        load_from_xml(path: string): MujocoModelLike;
-    };
-    MjModel?: {
-        loadFromXML(path: string): MujocoModelLike;
-    };
-    State: new (model: MujocoModelLike) => unknown;
-    Simulation: new (model: MujocoModelLike, state: unknown) => MujocoSimulationLike;
-    MjData: new (model: MujocoModelLike) => MujocoDataLike;
-    mj_resetData(model: MujocoModelLike, data: MujocoDataLike): void;
-    mj_forward(model: MujocoModelLike, data: MujocoDataLike): void;
-    mj_applyFT(
-        model: MujocoModelLike,
-        data: MujocoDataLike,
-        force: [number, number, number],
-        torque: [number, number, number],
-        point: [number, number, number],
-        bodyID: number,
-        qfrcApplied: MutableNumericArrayLike
-    ): void;
-    mj_step(model: MujocoModelLike, data: MujocoDataLike): void;
-    mjtGeom: {
-        mjGEOM_SPHERE: MujocoEnumValue;
-        mjGEOM_CAPSULE: MujocoEnumValue;
-        mjGEOM_CYLINDER: MujocoEnumValue;
-        mjGEOM_BOX: MujocoEnumValue;
-        mjGEOM_ELLIPSOID: MujocoEnumValue;
-        mjGEOM_MESH: MujocoEnumValue;
-    };
-    mjtJoint: {
-        mjJNT_HINGE: MujocoEnumValue;
-        mjJNT_BALL: MujocoEnumValue;
-    };
-}
+const MAX_SIMULATION_FRAME_DELTA_MS = 100;
+const MAX_SIMULATION_STEPS_PER_FRAME = 100;
 
 interface MujocoSimulationParams {
     paused: boolean;
@@ -133,11 +27,9 @@ interface MujocoSimulationParams {
 
 export class MujocoSimulationManager {
     sceneManager: SceneManager;
-    mujoco: MujocoModuleLike | null;
-    model: MujocoModelLike | null;
-    simulation: MujocoSimulationLike | null;
-    state: unknown;
-    data: MujocoDataLike | null;
+    mujoco: MainModule | null;
+    model: MjModel | null;
+    data: MjData | null;
     bodies: Record<number, BodyGroup>;
     bodyToThreeMap: Map<number, THREE.Object3D>;
     lights: THREE.Light[];
@@ -146,18 +38,16 @@ export class MujocoSimulationManager {
     originalModel: UnifiedRobotModel | null;
     params: MujocoSimulationParams;
     mujoco_time: number;
+    simulationAccumulatorMS: number;
     tmpVec: THREE.Vector3;
     tmpQuat: THREE.Quaternion;
     isLoaded: boolean;
     isSimulating: boolean;
-    isOldAPI: boolean;
 
     constructor(sceneManager: SceneManager) {
         this.sceneManager = sceneManager;
         this.mujoco = null;
         this.model = null;
-        this.simulation = null;
-        this.state = null;
         this.data = null;
         this.bodies = {};  // MuJoCo body ID -> Three.js Group mapping
         this.bodyToThreeMap = new Map();  // MuJoCo body -> original model link
@@ -174,31 +64,33 @@ export class MujocoSimulationManager {
         };
 
         this.mujoco_time = 0.0;
+        this.simulationAccumulatorMS = 0.0;
         this.tmpVec = new THREE.Vector3();
         this.tmpQuat = new THREE.Quaternion();
 
         // Whether loaded
         this.isLoaded = false;
         this.isSimulating = false;
-        this.isOldAPI = false;
     }
 
     /**
      * Initialize MuJoCo WASM
      */
-    async init() {
+    async init(): Promise<MainModule> {
         if (this.mujoco) {
             return this.mujoco;
         }
 
         try {
-            // Import from mujoco-js npm package
-            const load_mujoco = (await import('mujoco-js/dist/mujoco_wasm.js')).default;
-            this.mujoco = await load_mujoco() as unknown as MujocoModuleLike;
+            const loadMujoco = (await import('@mujoco/mujoco')).default;
+            this.mujoco = await loadMujoco({
+                locateFile: (path: string) => path.endsWith('.wasm') ? mujocoWasmUrl : path
+            });
 
             // Setup virtual file system
-            this.mujoco.FS.mkdir('/working');
-            this.mujoco.FS.mount(this.mujoco.MEMFS, { root: '.' }, '/working');
+            if (!this.mujoco.FS.analyzePath('/working', false).exists) {
+                this.mujoco.FS.mkdir('/working');
+            }
 
             return this.mujoco;
         } catch (error) {
@@ -239,20 +131,10 @@ export class MujocoSimulationManager {
                 await this.writeAssetsToVFS(xmlContent, filename, fileMap);
             }
 
-            // Load model (compatible with old and new API)
+            // Compile the MJCF file using the canonical MuJoCo API.
             try {
-                if (this.mujoco.Model && typeof this.mujoco.Model.load_from_xml === 'function') {
-                    this.model = this.mujoco.Model.load_from_xml(xmlPath);
-                    this.state = new this.mujoco.State(this.model);
-                    this.simulation = new this.mujoco.Simulation(this.model, this.state);
-                }
-                else if (this.mujoco.MjModel && typeof this.mujoco.MjModel.loadFromXML === 'function') {
-                    this.model = this.mujoco.MjModel.loadFromXML(xmlPath);
-                    this.data = new this.mujoco.MjData(this.model);
-                    this.isOldAPI = true;
-                } else {
-                    throw new Error('Cannot find MuJoCo model loading method');
-                }
+                this.model = this.mujoco.MjModel.from_xml_path(xmlPath);
+                this.data = new this.mujoco.MjData(this.model);
             } catch (loadError) {
                 // Provide more detailed error information
                 let errorMsg = 'MuJoCo model loading failed: ';
@@ -281,14 +163,8 @@ export class MujocoSimulationManager {
             // Create MuJoCo visualization model (created directly from physics engine)
             await this.createThreeScene();
 
-            // Reset simulation (compatible with old and new API)
-            if (this.isOldAPI) {
-                this.mujoco.mj_resetData(this.model, this.data);
-                this.mujoco.mj_forward(this.model, this.data);
-            } else {
-                this.simulation.resetData();
-                this.simulation.forward();
-            }
+            this.mujoco.mj_resetData(this.model, this.data);
+            this.mujoco.mj_forward(this.model, this.data);
 
             this.isLoaded = true;
             this.params.paused = true;
@@ -308,6 +184,7 @@ export class MujocoSimulationManager {
             return null;
         } catch (error) {
             console.error('Failed to load MJCF scene:', error);
+            this.clearScene();
             throw error;
         }
     }
@@ -474,7 +351,7 @@ export class MujocoSimulationManager {
 
                     // Verify file was written successfully
                     try {
-                        const stat = this.mujoco.FS.stat(vfsPath);
+                        const stat = this.mujoco.FS.stat(vfsPath, false);
                         if (!stat) {
                             throw new Error('File write verification failed');
                         }
@@ -555,7 +432,7 @@ export class MujocoSimulationManager {
         let acc = '';
         for (let i = 0; i < parts.length - 1; i++) {
             acc += (i === 0 ? '' : '/') + parts[i];
-            if (acc && !this.mujoco.FS.analyzePath(acc).exists) {
+            if (acc && !this.mujoco.FS.analyzePath(acc, false).exists) {
                 this.mujoco.FS.mkdir(acc);
             }
         }
@@ -1275,21 +1152,25 @@ export class MujocoSimulationManager {
         }
 
         if (!this.params.paused) {
-            // Get timestep (compatible with old and new API)
-            const timestep = this.isOldAPI ? this.model.opt.timestep : this.model.getOptions().timestep;
+            const timestep = this.model.opt.timestep;
+            const timestepMS = timestep * 1000.0;
 
-            // Time synchronization
-            if (timeMS - this.mujoco_time > 35.0) {
+            if (this.mujoco_time === 0 || timeMS < this.mujoco_time) {
                 this.mujoco_time = timeMS;
             }
+            const frameDeltaMS = Math.min(
+                timeMS - this.mujoco_time,
+                MAX_SIMULATION_FRAME_DELTA_MS
+            );
+            this.mujoco_time = timeMS;
+            this.simulationAccumulatorMS += frameDeltaMS;
 
-            // Step simulation (compatible with old and new API)
-            while (this.mujoco_time < timeMS) {
+            let stepCount = 0;
+            while (this.simulationAccumulatorMS >= timestepMS &&
+                   stepCount < MAX_SIMULATION_STEPS_PER_FRAME) {
                 // Clear old applied forces
-                if (this.isOldAPI) {
-                    for (let i = 0; i < this.data.qfrc_applied.length; i++) {
-                        this.data.qfrc_applied[i] = 0.0;
-                    }
+                for (let i = 0; i < this.data.qfrc_applied.length; i++) {
+                    this.data.qfrc_applied[i] = 0.0;
                 }
 
                 // Apply drag force
@@ -1297,8 +1178,8 @@ export class MujocoSimulationManager {
                     const dragged = this.dragStateManager.physicsObject;
                     if (dragged && dragged.bodyID) {
                         // First update body positions to get current state
-                        const xpos = this.isOldAPI ? this.data.xpos : this.simulation.xpos;
-                        const xquat = this.isOldAPI ? this.data.xquat : this.simulation.xquat;
+                        const xpos = this.data.xpos;
+                        const xquat = this.data.xquat;
 
                         for (let b = 0; b < this.model.nbody; b++) {
                             const bodyGroup = this.bodies[b];
@@ -1320,32 +1201,31 @@ export class MujocoSimulationManager {
                         );
                         const point = this.toMujocoPos(this.dragStateManager.worldHit.clone());
 
-                        if (this.isOldAPI) {
-                            this.mujoco.mj_applyFT(
-                                this.model,
-                                this.data,
-                                [force.x, force.y, force.z],
-                                [0, 0, 0],
-                                [point.x, point.y, point.z],
-                                bodyID,
-                                this.data.qfrc_applied
-                            );
-                        }
+                        this.mujoco.mj_applyFT(
+                            this.model,
+                            this.data,
+                            [force.x, force.y, force.z],
+                            [0, 0, 0],
+                            [point.x, point.y, point.z],
+                            bodyID,
+                            this.data.qfrc_applied
+                        );
                     }
                 }
 
-                if (this.isOldAPI) {
-                    this.mujoco.mj_step(this.model, this.data);
-                } else {
-                    this.simulation.step();
-                }
-                this.mujoco_time += timestep * 1000.0;
+                this.mujoco.mj_step(this.model, this.data);
+                this.simulationAccumulatorMS -= timestepMS;
+                stepCount++;
+            }
+
+            if (stepCount === MAX_SIMULATION_STEPS_PER_FRAME) {
+                this.simulationAccumulatorMS = 0;
             }
         }
 
         // Update original model body transforms (using MuJoCo physics calculation results)
-        const xpos = this.isOldAPI ? this.data.xpos : this.simulation.xpos;
-        const xquat = this.isOldAPI ? this.data.xquat : this.simulation.xquat;
+        const xpos = this.data.xpos;
+        const xquat = this.data.xquat;
 
         for (let b = 0; b < this.model.nbody; b++) {
             const bodyGroup = this.bodies[b];
@@ -1369,18 +1249,10 @@ export class MujocoSimulationManager {
      */
     reset() {
         if (this.model) {
-            // Save current simulation state (don't pause simulation)
-            const wasSimulating = this.isSimulating;
-
-            // Reset physics state
-            if (this.isOldAPI) {
-                this.mujoco.mj_resetData(this.model, this.data);
-                this.mujoco.mj_forward(this.model, this.data);
-            } else {
-                this.simulation.resetData();
-                this.simulation.forward();
-            }
-            this.mujoco_time = 0;
+            this.mujoco.mj_resetData(this.model, this.data);
+            this.mujoco.mj_forward(this.model, this.data);
+            this.mujoco_time = this.isSimulating ? performance.now() : 0;
+            this.simulationAccumulatorMS = 0;
         }
     }
 
@@ -1390,6 +1262,8 @@ export class MujocoSimulationManager {
     startSimulation() {
         this.params.paused = false;
         this.isSimulating = true;
+        this.mujoco_time = performance.now();
+        this.simulationAccumulatorMS = 0;
 
         // Show MuJoCo model
         if (this.mujocoRoot) {
@@ -1461,27 +1335,14 @@ export class MujocoSimulationManager {
      * Clear scene
      */
     clearScene() {
-        // Release MuJoCo resources (compatible with old and new API)
-        if (this.isOldAPI) {
-            if (this.data) {
-                this.data.delete?.();
-                this.data = null;
-            }
-            if (this.model) {
-                this.model.delete?.();
-                this.model = null;
-            }
-        } else {
-            if (this.simulation) {
-                this.simulation.free?.();
-                this.simulation = null;
-            }
-            if (this.state) {
-                this.state = null;
-            }
-            if (this.model) {
-                this.model = null;
-            }
+        // Embind objects own WASM heap memory and must be deleted exactly once.
+        if (this.data) {
+            this.data.delete();
+            this.data = null;
+        }
+        if (this.model) {
+            this.model.delete();
+            this.model = null;
         }
 
         // Clear files in VFS
@@ -1493,7 +1354,7 @@ export class MujocoSimulationManager {
                     if (file !== '.' && file !== '..') {
                         try {
                             const path = '/working/' + file;
-                            const stat = this.mujoco.FS.stat(path);
+                            const stat = this.mujoco.FS.stat(path, false);
                             if (this.mujoco.FS.isDir(stat.mode)) {
                                 // Recursively delete directory
                                 this.removeDirectory(path);
@@ -1544,6 +1405,8 @@ export class MujocoSimulationManager {
         this.isLoaded = false;
         this.isSimulating = false;
         this.params.paused = true;
+        this.mujoco_time = 0;
+        this.simulationAccumulatorMS = 0;
         this.sceneManager.redraw();
     }
 
@@ -1558,7 +1421,7 @@ export class MujocoSimulationManager {
             for (const file of files) {
                 if (file !== '.' && file !== '..') {
                     const fullPath = path + '/' + file;
-                    const stat = this.mujoco.FS.stat(fullPath);
+                    const stat = this.mujoco.FS.stat(fullPath, false);
                     if (this.mujoco.FS.isDir(stat.mode)) {
                         this.removeDirectory(fullPath);
                     } else {

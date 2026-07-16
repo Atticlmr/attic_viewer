@@ -5,7 +5,7 @@
 
 # Attic Viewer (机器人模型查看器)
 
-[![版本](https://img.shields.io/badge/version-v1.3.3-blue.svg)](https://github.com/Atticlmr/attic_viewer)
+[![版本](https://img.shields.io/badge/version-v2.0.0-blue.svg)](https://github.com/Atticlmr/attic_viewer)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-yellow.svg)](LICENSE)
 [![平台](https://img.shields.io/badge/platform-web-orange.svg)](https://github.com/Atticlmr/attic_viewer)
 [![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6.svg)](https://github.com/Atticlmr/attic_viewer)
@@ -24,17 +24,14 @@
 - **格式支持**: URDF, Xacro, MJCF, USD
 - **可视化**: 视觉/碰撞几何、惯性张量、质心、坐标系
 
-## v1.3.3 更新
+## v2.0.0 更新
 
-- 修复快速切换模型时旧请求覆盖新模型的问题。
-- 合并重复渲染循环，静止场景改为按需渲染。
-- 完善 Three.js、MuJoCo 和辅助可视化对象的资源释放，避免 GPU 内存累积。
-- 为静态部署增加跨源隔离兜底，改善 USD WASM 在线可用性。
-- 对齐 Three.js 类型版本，补充加载竞态和资源释放测试，并加强 CI 发布门禁。
-
-## 下一版本：v1.4.0
-
-下一版本计划将 MuJoCo WebAssembly 从旧包名 `mujoco-js` 迁移到 Google DeepMind 官方正式包 `@mujoco/mujoco`，并完整验证 MJCF 加载、仿真步进、拖拽和资源释放兼容性。
+- 浏览器物理运行时迁移到 Google DeepMind 官方 `@mujoco/mujoco` 3.10。
+- WASM 资源改为显式按需加载，兼容开发环境和静态子路径部署。
+- 移除旧兼容层，统一使用官方 `MjModel`、`MjData` 和 `mj_*` API。
+- 文件选择、模型识别、文件树和仿真入口完整支持 `.mjcf` 后缀。
+- 使用有界固定步长累加器，修复低帧率下物理引擎不步进的问题。
+- 增加初始化、步进、重置和 Embind 资源释放回归测试。
 
 ## 快速开始
 

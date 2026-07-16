@@ -33,6 +33,23 @@ describe('FileHandler', () => {
         expect(handler.getDefaultLoadableFile(files)?.path).toBe('robot/robot.urdf');
     });
 
+    it('recognizes .mjcf files as MJCF models', async () => {
+        const handler = new FileHandler();
+        const file = new File([
+            '<mujoco><worldbody><body><joint name="hinge"/></body></worldbody></mujoco>'
+        ], 'robot.mjcf');
+
+        const files = await handler.findAllLoadableFiles([file]);
+
+        expect(files).toHaveLength(1);
+        expect(files[0]).toMatchObject({
+            name: 'robot.mjcf',
+            type: 'mjcf',
+            category: 'model',
+            ext: 'mjcf'
+        });
+    });
+
     it('prefers root USD stages over nested props and thumbnails', () => {
         const handler = new FileHandler();
         const files = [

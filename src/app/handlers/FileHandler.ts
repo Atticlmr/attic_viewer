@@ -29,7 +29,7 @@ export class FileHandler {
      */
     handleFileClick(fileInfo: LoadableFileInfo): void {
         const ext = fileInfo.ext;
-        const modelExts = ['urdf', 'xacro', 'xml', 'usd', 'usda', 'usdc', 'usdz'];
+        const modelExts = ['urdf', 'xacro', 'xml', 'mjcf', 'usd', 'usda', 'usdc', 'usdz'];
         const meshExts = ['dae', 'stl', 'obj', 'collada'];
 
         if (modelExts.includes(ext)) {

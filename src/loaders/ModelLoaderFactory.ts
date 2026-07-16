@@ -52,6 +52,7 @@ export class ModelLoaderFactory {
             case 'xacro':
                 return 'xacro';
             case 'xml':
+            case 'mjcf':
                 // XML files are MJCF format, verify if it's a robot file by content
                 if (content) {
                     // Verify if it's a valid robot MJCF file (has joints or actuators)

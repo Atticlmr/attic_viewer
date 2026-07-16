@@ -17,7 +17,7 @@ export class ModelHandler {
      */
     isMJCF(file: File, model: ViewerModel): boolean {
         const fileExt = file.name.split('.').pop()?.toLowerCase();
-        return fileExt === 'xml' && model?.userData?.type === 'mjcf';
+        return ['xml', 'mjcf'].includes(fileExt || '') && model?.userData?.type === 'mjcf';
     }
 
     /**

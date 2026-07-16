@@ -93,6 +93,7 @@ export function getFileTypeFromExtension(ext: string): 'urdf' | 'xacro' | 'mjcf'
         'urdf': 'urdf',
         'xacro': 'xacro',
         'xml': 'mjcf',
+        'mjcf': 'mjcf',
         'usd': 'usd',
         'usda': 'usd',
         'usdc': 'usd',
@@ -105,7 +106,7 @@ export function getFileTypeFromExtension(ext: string): 'urdf' | 'xacro' | 'mjcf'
  * Get file display type
  */
 export function getFileDisplayType(ext: string, _fileName: string): 'model' | 'mesh' | 'file' {
-    const modelExts = ['urdf', 'xacro', 'xml', 'usd', 'usda', 'usdc', 'usdz'];
+    const modelExts = ['urdf', 'xacro', 'xml', 'mjcf', 'usd', 'usda', 'usdc', 'usdz'];
     const meshExts = ['dae', 'stl', 'obj', 'collada'];
 
     if (modelExts.includes(ext)) {

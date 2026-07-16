@@ -8,7 +8,7 @@
 
 # Attic Viewer
 
-[![Version](https://img.shields.io/badge/version-v1.3.3-blue.svg)](https://github.com/Atticlmr/attic_viewer)
+[![Version](https://img.shields.io/badge/version-v2.0.0-blue.svg)](https://github.com/Atticlmr/attic_viewer)
 [![License](https://img.shields.io/badge/license-Apache--2.0-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-web-orange.svg)](https://github.com/Atticlmr/attic_viewer)
 [![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6.svg)](https://github.com/Atticlmr/attic_viewer)
@@ -35,18 +35,14 @@
 - **Physics Simulation**: Integrated MuJoCo runtime for MJCF models
 - **Web Deployment**: GitHub Pages workflow for automatic build and deployment on `main`
 
-## What's New in v1.3.3
+## What's New in v2.0.0
 
-- Prevented stale asynchronous model loads from replacing the latest selected file
-- Consolidated rendering into one animation loop and restored on-demand WebGL rendering
-- Added explicit Three.js and MuJoCo resource disposal when models are replaced
-- Added cross-origin isolation fallback for USD WASM on static hosting
-- Hardened USD iframe messaging and aligned Three.js runtime/type versions
-- Added regression tests plus typecheck/test gates to deployment and release workflows
-
-## Next Release: v1.4.0
-
-The next release will migrate MuJoCo WebAssembly from the legacy `mujoco-js` package name to the canonical Google DeepMind package, `@mujoco/mujoco`. The migration will include standalone WASM asset loading and full MJCF simulation regression coverage.
+- Migrated the browser physics runtime to Google DeepMind's official `@mujoco/mujoco` 3.10 package
+- Added explicit, lazy-loaded WASM asset handling for development and static subpath deployments
+- Replaced the legacy compatibility layer with the official `MjModel`, `MjData`, and `mj_*` APIs
+- Added `.mjcf` file support throughout file selection, model detection, the file tree, and simulation controls
+- Fixed physics stepping at lower frame rates with a bounded fixed-step accumulator
+- Added regression coverage for initialization, stepping, reset, and Embind resource disposal
 
 ## Getting Started
 

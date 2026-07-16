@@ -62,8 +62,10 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
+          name: Attic Viewer ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
           files: robot-viewer-${{ github.ref_name }}.zip
+          body_path: RELEASE_NOTES.md
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

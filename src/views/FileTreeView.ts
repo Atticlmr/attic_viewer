@@ -170,7 +170,7 @@ export class FileTreeView {
         input.style.display = 'none';
 
         if (!isFolder) {
-            input.setAttribute('accept', '.urdf,.xacro,.xml,.dae,.stl,.obj,.collada,.usd,.usda,.usdc,.usdz');
+            input.setAttribute('accept', '.urdf,.xacro,.xml,.mjcf,.dae,.stl,.obj,.collada,.usd,.usda,.usdc,.usdz');
         }
 
         input.addEventListener('change', (e) => {
@@ -313,7 +313,7 @@ export class FileTreeView {
 
         fileMap.forEach((file, path) => {
             const ext = file.name.split('.').pop()?.toLowerCase();
-            const supportedExtensions = ['urdf', 'xacro', 'xml', 'dae', 'stl', 'obj', 'collada', 'usd', 'usda', 'usdc'];
+            const supportedExtensions = ['urdf', 'xacro', 'xml', 'mjcf', 'dae', 'stl', 'obj', 'collada', 'usd', 'usda', 'usdc'];
 
             if (!ext) return;
             if (!supportedExtensions.includes(ext)) return;
@@ -428,7 +428,7 @@ export class FileTreeView {
      */
     renderFiles(files: FileTreeFileEntry[], container: HTMLElement): void {
         files.sort((a, b) => {
-            const modelExts = ['urdf', 'xacro', 'xml', 'usd', 'usda', 'usdc'];
+            const modelExts = ['urdf', 'xacro', 'xml', 'mjcf', 'usd', 'usda', 'usdc'];
             const aIsModel = modelExts.includes(a.ext);
             const bIsModel = modelExts.includes(b.ext);
 
@@ -501,12 +501,12 @@ export class FileTreeView {
 }
 
 function isModelExtension(ext: string): boolean {
-    return ['urdf', 'xacro', 'xml', 'usd', 'usda', 'usdc', 'usdz'].includes(ext);
+    return ['urdf', 'xacro', 'xml', 'mjcf', 'usd', 'usda', 'usdc', 'usdz'].includes(ext);
 }
 
 function mapExtensionToFileType(ext: string): AppFileType {
     if (['urdf', 'xacro'].includes(ext)) return ext as AppFileType;
-    if (['xml'].includes(ext)) return 'mjcf';
+    if (['xml', 'mjcf'].includes(ext)) return 'mjcf';
     if (['usd', 'usda', 'usdc', 'usdz'].includes(ext)) return 'usd';
     if (['dae', 'stl', 'obj', 'collada'].includes(ext)) return 'mesh';
     return 'unknown';

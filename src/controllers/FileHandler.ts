@@ -102,7 +102,7 @@ export class FileHandler {
             if (fileInfo.type === 'usd') value += 200;
             if (fileInfo.category === 'mesh') value += 50;
 
-            if (['urdf', 'xacro', 'xml', 'usda', 'usd', 'usdc', 'usdz'].includes(fileInfo.ext)) value += 20;
+            if (['urdf', 'xacro', 'xml', 'mjcf', 'usda', 'usd', 'usdc', 'usdz'].includes(fileInfo.ext)) value += 20;
             if (name === 'robot.urdf' || name === 'model.urdf') value += 120;
             if (name === 'scene.usd' || name === 'scene.usda' || name === 'root.usd' || name === 'root.usda') value += 100;
             if (fileInfo.type === 'usd') {
@@ -312,7 +312,7 @@ export class FileHandler {
      */
     async findAllLoadableFiles(files: Array<File | FileWithPath>): Promise<LoadableFileInfo[]> {
         const supportedExtensions = {
-            model: ['urdf', 'xacro', 'xml', 'usd', 'usda', 'usdc', 'usdz'],
+            model: ['urdf', 'xacro', 'xml', 'mjcf', 'usd', 'usda', 'usdc', 'usdz'],
             mesh: ['dae', 'stl', 'obj', 'collada']
         };
         const loadableFiles: LoadableFileInfo[] = [];
@@ -329,7 +329,7 @@ export class FileHandler {
             }
 
             if (supportedExtensions.model.includes(ext)) {
-                if (ext === 'xml') {
+                if (ext === 'xml' || ext === 'mjcf') {
                     try {
                         const content = await readFileContent(file);
                         const fileType = ModelLoaderFactory.detectFileType(file.name, content);
