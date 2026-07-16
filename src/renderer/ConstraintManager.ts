@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ModelLoaderFactory } from '../loaders/ModelLoaderFactory.js';
 import type { SceneManager } from './SceneManager.js';
 import type { Constraint, Joint, UnifiedRobotModel } from '../models/UnifiedRobotModel.js';
+import { disposeObject3D } from '../utils/ThreeDisposal.js';
 
 /**
  * ConstraintManager - Handles parallel mechanism constraint visualization and solving
@@ -21,13 +22,7 @@ export class ConstraintManager {
      * Visualize parallel mechanism constraints
      */
     visualizeConstraints(model: UnifiedRobotModel, world: THREE.Object3D | null): void {
-        // Clean up previous constraint visualizations
-        this.constraintVisuals.forEach(visual => {
-            if (visual.parent) {
-                visual.parent.remove(visual);
-            }
-        });
-        this.constraintVisuals = [];
+        this.clear();
 
         if (!model.constraints || model.constraints.size === 0) {
             return; // No constraints, skip
@@ -553,6 +548,7 @@ export class ConstraintManager {
     clear(): void {
         this.constraintVisuals.forEach(visual => {
             if (visual.parent) visual.parent.remove(visual);
+            disposeObject3D(visual);
         });
         this.constraintVisuals = [];
     }

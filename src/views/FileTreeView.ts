@@ -492,6 +492,12 @@ export class FileTreeView {
 
         return item;
     }
+
+    dispose(): void {
+        this.clearEventListeners();
+        this.onFileClick = null;
+        this.onFilesSelected = null;
+    }
 }
 
 function isModelExtension(ext: string): boolean {

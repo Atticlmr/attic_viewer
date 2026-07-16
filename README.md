@@ -8,7 +8,7 @@
 
 # Attic Viewer
 
-[![Version](https://img.shields.io/badge/version-v1.3.2-blue.svg)](https://github.com/Atticlmr/attic_viewer)
+[![Version](https://img.shields.io/badge/version-v1.3.3-blue.svg)](https://github.com/Atticlmr/attic_viewer)
 [![License](https://img.shields.io/badge/license-Apache--2.0-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-web-orange.svg)](https://github.com/Atticlmr/attic_viewer)
 [![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6.svg)](https://github.com/Atticlmr/attic_viewer)
@@ -35,15 +35,18 @@
 - **Physics Simulation**: Integrated MuJoCo runtime for MJCF models
 - **Web Deployment**: GitHub Pages workflow for automatic build and deployment on `main`
 
-## What's New in v1.3.0
+## What's New in v1.3.3
 
-- Integrated the robot conversion workflow into the main viewer instead of keeping it as a standalone page
-- Added viewer export flow for URDF/MJCF with packaged assets in ZIP format
-- Normalized exported mesh assets into a dedicated `mesh/` folder
-- Improved URDF <-> MJCF conversion fidelity, including better handling of multi-joint bodies, default classes, actuators, and constraint-related metadata
-- Fixed export behavior so converted downloads are packaged consistently for direct reuse
-- Added GitHub Actions deployment for automatic GitHub Pages publishing on `main`
-- Completed the current TypeScript cleanup pass across adapters, controllers, renderers, utilities, and tests
+- Prevented stale asynchronous model loads from replacing the latest selected file
+- Consolidated rendering into one animation loop and restored on-demand WebGL rendering
+- Added explicit Three.js and MuJoCo resource disposal when models are replaced
+- Added cross-origin isolation fallback for USD WASM on static hosting
+- Hardened USD iframe messaging and aligned Three.js runtime/type versions
+- Added regression tests plus typecheck/test gates to deployment and release workflows
+
+## Next Release: v1.4.0
+
+The next release will migrate MuJoCo WebAssembly from the legacy `mujoco-js` package name to the canonical Google DeepMind package, `@mujoco/mujoco`. The migration will include standalone WASM asset loading and full MJCF simulation regression coverage.
 
 ## Getting Started
 
@@ -66,6 +69,7 @@ pnpm test
 
 # TypeScript type checking
 pnpm typecheck
+pnpm check
 ```
 
 ## Development Commands
@@ -79,6 +83,7 @@ pnpm typecheck
 | `pnpm test:watch` | Run tests in watch mode |
 | `pnpm test:coverage` | Run tests with coverage |
 | `pnpm typecheck` | TypeScript type checking |
+| `pnpm check` | Run type checking, tests, and production build |
 
 ## Project Structure
 
@@ -113,7 +118,7 @@ This project has been migrated from JavaScript to TypeScript:
 - **Status**: TypeScript migration baseline completed for the current codebase
 - **Build**: Passing ✓
 - **Type Check**: Passing ✓
-- **Tests**: Passing (10 tests) ✓
+- **Tests**: Passing (30 tests) ✓
 
 ## Branches
 

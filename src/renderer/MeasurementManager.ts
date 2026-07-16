@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { SceneManager } from './SceneManager.js';
+import { disposeObject3D } from '../utils/ThreeDisposal.js';
 
 interface MeasurementDelta {
     x: number;
@@ -242,6 +243,7 @@ export class MeasurementManager {
     clearMeasurement(): void {
         if (this.measurementHelper) {
             this.sceneManager.scene.remove(this.measurementHelper);
+            disposeObject3D(this.measurementHelper);
             this.measurementHelper = null;
             this.sceneManager.redraw();
         }

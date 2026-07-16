@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { SceneManager } from './SceneManager.js';
 import type { Joint, Link } from '../models/UnifiedRobotModel.js';
+import { disposeObject3D } from '../utils/ThreeDisposal.js';
 
 interface JointAxisInfo {
     mesh: THREE.Group;
@@ -535,6 +536,7 @@ export class CoordinateAxesManager {
             if (axes.parent) {
                 axes.parent.remove(axes);
             }
+            disposeObject3D(axes);
         });
         this.linkAxesHelpers.clear();
     }
@@ -547,6 +549,7 @@ export class CoordinateAxesManager {
             if (axisInfo.isAttached && axisInfo.parent) {
                 axisInfo.parent.remove(axisInfo.mesh);
             }
+            disposeObject3D(axisInfo.mesh);
         });
         this.jointAxesHelpers.clear();
     }

@@ -134,7 +134,7 @@ export class USDAdapter {
 
         try {
             // Load USDZ file
-            const group = await new Promise<THREE.Group>((resolve, reject) => {
+            const group = await new Promise<THREE.Mesh>((resolve, reject) => {
                 loader.load(
                     blobUrl,
                     resolve,
@@ -160,7 +160,7 @@ export class USDAdapter {
     /**
      * Convert Three.js Group to UnifiedRobotModel
      */
-    static convertThreeGroupToModel(group: THREE.Group, fileName: string): UnifiedRobotModel {
+    static convertThreeGroupToModel(group: THREE.Object3D, fileName: string): UnifiedRobotModel {
         const model = new UnifiedRobotModel();
         model.name = fileName.replace(/\.(usdz|usdc|usd|usda)$/i, '');
         model.threeObject = group;

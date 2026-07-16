@@ -10,6 +10,7 @@ import { CoordinateAxesManager } from './CoordinateAxesManager.js';
 import { HighlightManager } from './HighlightManager.js';
 import { MeasurementManager } from './MeasurementManager.js';
 import type { ViewerModel } from '../types/app.js';
+import { disposeViewerModel } from '../utils/ThreeDisposal.js';
 
 /**
  * SceneManager - Core scene management and coordination
@@ -24,6 +25,10 @@ export class SceneManager {
     _eventListeners: Map<string, Set<(...args: unknown[]) => void>>;
     _renderLoopId: number | null;
     resizeObserver: ResizeObserver | null;
+    themeObserver: MutationObserver | null;
+    windowResizeHandler: (() => void) | null;
+    controlsChangeHandler: () => void;
+    modelReadyTimers: Set<number>;
     world: THREE.Object3D | null;
     camera: THREE.PerspectiveCamera;
     renderer: THREE.WebGLRenderer;
@@ -55,6 +60,11 @@ export class SceneManager {
         this._dirty = false;
         this._pendingRender = false;
         this._renderingPaused = false;
+        this._renderLoopId = null;
+        this.resizeObserver = null;
+        this.themeObserver = null;
+        this.windowResizeHandler = null;
+        this.modelReadyTimers = new Set();
 
         // Event system
         this._eventListeners = new Map();
@@ -89,7 +99,8 @@ export class SceneManager {
         this.controls.target.set(0, 0, 0);
 
         // Mark as needing render on controls change
-        this.controls.addEventListener('change', () => this.redraw());
+        this.controlsChangeHandler = () => this.redraw();
+        this.controls.addEventListener('change', this.controlsChangeHandler);
 
         // Set mouse buttons
         if (this.controls.mouseButtons) {
@@ -140,9 +151,6 @@ export class SceneManager {
         // Window resize - use ResizeObserver to listen for canvas container size changes
         this.setupResizeObserver();
 
-        // Start continuous render loop
-        this.startRenderLoop();
-
         // Render immediately to show initial scene
         this.redraw();
     }
@@ -165,7 +173,7 @@ export class SceneManager {
     }
 
     stopRenderLoop() {
-        if (this._renderLoopId) {
+        if (this._renderLoopId !== null) {
             cancelAnimationFrame(this._renderLoopId);
             this._renderLoopId = null;
         }
@@ -200,6 +208,12 @@ export class SceneManager {
         // Render immediately (for scenes requiring immediate update)
         this.renderer.render(this.scene, this.camera);
         this._dirty = false;
+    }
+
+    renderIfNeeded() {
+        if (this._dirty) {
+            this.render();
+        }
     }
 
     // ==================== Model Management ====================
@@ -303,6 +317,7 @@ export class SceneManager {
             // Use requestAnimationFrame to ensure rendering completes
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
+                    if (this.currentModel !== model) return;
                     this.updateEnvironment(true);
 
                     // Trigger model ready event
@@ -312,23 +327,40 @@ export class SceneManager {
         } else {
             // URDF/MJCF model: mesh files are loaded asynchronously, need to delay
             // Multiple extractions to catch meshes loaded at different times
-            setTimeout(() => {
+            this.scheduleModelTask(model, () => {
                 this.visualizationManager.extractVisualAndCollision(model);
             }, 100);
 
-            setTimeout(() => {
+            this.scheduleModelTask(model, () => {
                 this.visualizationManager.extractVisualAndCollision(model);
                 this.updateEnvironment(true);
                 this.emit('modelReady', model);
             }, 1000);
 
-            setTimeout(() => {
+            this.scheduleModelTask(model, () => {
                 this.visualizationManager.extractVisualAndCollision(model);
             }, 2500);
         }
     }
 
+    scheduleModelTask(model: ViewerModel, callback: () => void, delay: number): void {
+        const timerId = window.setTimeout(() => {
+            this.modelReadyTimers.delete(timerId);
+            if (this.currentModel === model) {
+                callback();
+            }
+        }, delay);
+        this.modelReadyTimers.add(timerId);
+    }
+
+    clearModelTasks(): void {
+        this.modelReadyTimers.forEach(timerId => window.clearTimeout(timerId));
+        this.modelReadyTimers.clear();
+    }
+
     removeModel(model) {
+        this.clearModelTasks();
+
         if (model && model.threeObject && model.threeObject.parent) {
             model.threeObject.parent.remove(model.threeObject);
         }
@@ -346,6 +378,9 @@ export class SceneManager {
             this.dragControls.dispose();
             this.dragControls = null;
         }
+
+        const envMap = this.environmentManager.getEnvironmentMap();
+        disposeViewerModel(model, envMap ? new Set([envMap]) : undefined);
 
         this.currentModel = null;
     }
@@ -904,11 +939,11 @@ export class SceneManager {
     // ==================== Theme & Resize ====================
 
     setupThemeListener() {
-        const observer = new MutationObserver(() => {
+        this.themeObserver = new MutationObserver(() => {
             this.updateBackgroundColor();
         });
 
-        observer.observe(document.documentElement, {
+        this.themeObserver.observe(document.documentElement, {
             attributes: true,
             attributeFilter: ['data-theme']
         });
@@ -937,7 +972,8 @@ export class SceneManager {
         // Use ResizeObserver to listen for canvas container size changes
         const container = this.canvas.parentElement;
         if (!container) {
-            window.addEventListener('resize', () => this.onWindowResize());
+            this.windowResizeHandler = () => this.onWindowResize();
+            window.addEventListener('resize', this.windowResizeHandler);
             return;
         }
 
@@ -1008,23 +1044,47 @@ export class SceneManager {
     // ==================== Event System ====================
 
     on(eventName, callback) {
-        if (!this._eventListeners[eventName]) {
-            this._eventListeners[eventName] = [];
-        }
-        this._eventListeners[eventName].push(callback);
+        const listeners = this._eventListeners.get(eventName) || new Set();
+        listeners.add(callback);
+        this._eventListeners.set(eventName, listeners);
     }
 
     off(eventName, callback) {
-        if (!this._eventListeners[eventName]) return;
-        this._eventListeners[eventName] = this._eventListeners[eventName].filter(cb => cb !== callback);
+        const listeners = this._eventListeners.get(eventName);
+        if (!listeners) return;
+        listeners.delete(callback);
+        if (listeners.size === 0) {
+            this._eventListeners.delete(eventName);
+        }
     }
 
     emit(eventName, ...args) {
-        if (!this._eventListeners[eventName]) return;
-        this._eventListeners[eventName].forEach(callback => callback(...args));
+        this._eventListeners.get(eventName)?.forEach(callback => callback(...args));
     }
 
     update() {
         this.controls.update();
+    }
+
+    dispose() {
+        this.stopRenderLoop();
+        this.clearModelTasks();
+        if (this.currentModel) {
+            this.removeModel(this.currentModel);
+        }
+
+        this.themeObserver?.disconnect();
+        this.themeObserver = null;
+        if (this.windowResizeHandler) {
+            window.removeEventListener('resize', this.windowResizeHandler);
+            this.windowResizeHandler = null;
+        }
+
+        this.controls.removeEventListener('change', this.controlsChangeHandler);
+        this.controls.dispose();
+        this.environmentManager.dispose();
+        this._eventListeners.clear();
+        this.renderer.renderLists.dispose();
+        this.renderer.dispose();
     }
 }

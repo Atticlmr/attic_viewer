@@ -5,7 +5,7 @@
 
 # Attic Viewer (机器人模型查看器)
 
-[![版本](https://img.shields.io/badge/version-v1.2.0-blue.svg)](https://github.com/Atticlmr/attic_viewer)
+[![版本](https://img.shields.io/badge/version-v1.3.3-blue.svg)](https://github.com/Atticlmr/attic_viewer)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-yellow.svg)](LICENSE)
 [![平台](https://img.shields.io/badge/platform-web-orange.svg)](https://github.com/Atticlmr/attic_viewer)
 [![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6.svg)](https://github.com/Atticlmr/attic_viewer)
@@ -23,6 +23,18 @@
 
 - **格式支持**: URDF, Xacro, MJCF, USD
 - **可视化**: 视觉/碰撞几何、惯性张量、质心、坐标系
+
+## v1.3.3 更新
+
+- 修复快速切换模型时旧请求覆盖新模型的问题。
+- 合并重复渲染循环，静止场景改为按需渲染。
+- 完善 Three.js、MuJoCo 和辅助可视化对象的资源释放，避免 GPU 内存累积。
+- 为静态部署增加跨源隔离兜底，改善 USD WASM 在线可用性。
+- 对齐 Three.js 类型版本，补充加载竞态和资源释放测试，并加强 CI 发布门禁。
+
+## 下一版本：v1.4.0
+
+下一版本计划将 MuJoCo WebAssembly 从旧包名 `mujoco-js` 迁移到 Google DeepMind 官方正式包 `@mujoco/mujoco`，并完整验证 MJCF 加载、仿真步进、拖拽和资源释放兼容性。
 
 ## 快速开始
 
@@ -45,6 +57,7 @@ pnpm test
 
 # TypeScript 类型检查
 pnpm typecheck
+pnpm check
 ```
 
 ## 开发命令
@@ -58,6 +71,7 @@ pnpm typecheck
 | `pnpm test:watch` | 监听模式运行测试 |
 | `pnpm test:coverage` | 运行测试并生成覆盖率报告 |
 | `pnpm typecheck` | TypeScript 类型检查 |
+| `pnpm check` | 运行类型检查、测试和生产构建 |
 
 ## 项目结构
 
@@ -89,13 +103,9 @@ attic_viewer/
 
 本项目已从 JavaScript 迁移到 TypeScript：
 
-- **进度**: 已解决约 91% 的类型错误
+- **类型检查**: 通过 ✓
 - **构建**: 通过 ✓
-- **测试**: 通过 (7 个测试) ✓
-
-### 剩余的 TypeScript 问题
-
-仍有一些类型错误（主要是 DOM 元素类型推断），但不影响构建和运行。
+- **测试**: 通过 (30 个测试) ✓
 
 ## 分支
 
@@ -111,4 +121,3 @@ attic_viewer/
 Apache License 2.0 - 参见 [LICENSE](LICENSE) 文件。
 
 ---
-

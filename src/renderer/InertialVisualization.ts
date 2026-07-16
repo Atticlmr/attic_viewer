@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { MathUtils } from '../utils/MathUtils.js';
 import type { SceneManager } from './SceneManager.js';
 import type { InertialProperties, Link, UnifiedRobotModel } from '../models/UnifiedRobotModel.js';
+import { disposeObject3D } from '../utils/ThreeDisposal.js';
 
 /**
  * InertialVisualization - Handles center of mass and inertia visualization
@@ -75,19 +76,7 @@ export class InertialVisualization {
      * Extract and visualize inertial properties from model
      */
     extractInertialProperties(model: UnifiedRobotModel): void {
-        // Clean up: remove from parent objects
-        this.comMarkers.forEach(marker => {
-            if (marker.parent) {
-                marker.parent.remove(marker);
-            }
-        });
-        this.inertiaEllipsoids.forEach(ellipsoid => {
-            if (ellipsoid.parent) {
-                ellipsoid.parent.remove(ellipsoid);
-            }
-        });
-        this.comMarkers = [];
-        this.inertiaEllipsoids = [];
+        this.clear();
 
         if (!model.links) {
             return;
@@ -405,9 +394,11 @@ export class InertialVisualization {
     clear(): void {
         this.comMarkers.forEach(marker => {
             if (marker.parent) marker.parent.remove(marker);
+            disposeObject3D(marker);
         });
         this.inertiaEllipsoids.forEach(ellipsoid => {
             if (ellipsoid.parent) ellipsoid.parent.remove(ellipsoid);
+            disposeObject3D(ellipsoid);
         });
         this.comMarkers = [];
         this.inertiaEllipsoids = [];

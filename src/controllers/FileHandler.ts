@@ -15,8 +15,9 @@ import {
 import type { AppFileType, FileWithPath, LoadableFileInfo, ViewerModel } from '../types/app.js';
 import type { USDViewerManager } from '../renderer/USDViewerManager.js';
 import { GeometryType, Link, UnifiedRobotModel, VisualGeometry } from '../models/UnifiedRobotModel.js';
+import { disposeViewerModel } from '../utils/ThreeDisposal.js';
 
-type ModelLoadedCallback = (model: ViewerModel, file: File, isMesh?: boolean, snapshot?: HTMLElement | null) => void;
+type ModelLoadedCallback = (model: ViewerModel, file: File, isMesh?: boolean, snapshot?: HTMLElement | null) => void | Promise<void>;
 type FilesLoadedCallback = (files: LoadableFileInfo[]) => void;
 
 export class FileHandler {
@@ -27,6 +28,7 @@ export class FileHandler {
     onFilesLoaded: FilesLoadedCallback | null;
     usdViewerManager: USDViewerManager | null;
     usdViewerInitializer: (() => Promise<USDViewerManager>) | null;
+    loadGeneration: number;
 
     constructor() {
         this.fileMap = new Map();
@@ -36,6 +38,22 @@ export class FileHandler {
         this.onFilesLoaded = null; // Callback for when files are loaded
         this.usdViewerManager = null; // USD viewer manager (lazy loaded)
         this.usdViewerInitializer = null;
+        this.loadGeneration = 0;
+    }
+
+    beginLoad(file: File): number {
+        this.currentModelFile = file;
+        this.loadGeneration += 1;
+        return this.loadGeneration;
+    }
+
+    isCurrentLoad(loadGeneration: number): boolean {
+        return loadGeneration === this.loadGeneration;
+    }
+
+    disposeStaleModel(model: ViewerModel): void {
+        const envMap = window.app?.sceneManager?.environmentManager?.getEnvironmentMap?.();
+        disposeViewerModel(model, envMap ? new Set([envMap]) : undefined);
     }
 
     /**
@@ -390,7 +408,7 @@ export class FileHandler {
      * Load model file
      */
     async loadFile(file: File): Promise<void> {
-        this.currentModelFile = file;
+        const loadGeneration = this.beginLoad(file);
 
         try {
             const fileName = file.name.toLowerCase();
@@ -412,6 +430,7 @@ export class FileHandler {
                 if (!this.usdViewerManager && this.usdViewerInitializer) {
                     try {
                         await this.usdViewerInitializer();
+                        if (!this.isCurrentLoad(loadGeneration)) return;
                     } catch (error) {
                         console.error('USD viewer initialization failed:', error);
                         return;
@@ -432,7 +451,13 @@ export class FileHandler {
                     { usdViewerManager: this.usdViewerManager }
                 );
 
-                this.onModelLoaded?.(model as ViewerModel, file, false, null);
+                if (!this.isCurrentLoad(loadGeneration)) {
+                    this.disposeStaleModel(model as ViewerModel);
+                    return;
+                }
+
+                await this.onModelLoaded?.(model as ViewerModel, file, false, null);
+                if (!this.isCurrentLoad(loadGeneration)) return;
                 document.getElementById('drop-zone')?.classList.remove('show');
                 document.getElementById('drop-zone')?.classList.remove('drag-over');
                 return;
@@ -440,6 +465,7 @@ export class FileHandler {
 
             // For other files, read text content
             const content = await readFileContent(file);
+            if (!this.isCurrentLoad(loadGeneration)) return;
 
             // Detect if USDC binary format (based on content)
             if (this.isUSDCBinaryContent(content)) {
@@ -467,13 +493,20 @@ export class FileHandler {
                 { usdViewerManager: this.usdViewerManager }
             );
 
+            if (!this.isCurrentLoad(loadGeneration)) {
+                this.disposeStaleModel(model as ViewerModel);
+                return;
+            }
+
             // Notify model loaded (pass null as snapshot, let main.js create it)
-            this.onModelLoaded?.(model as ViewerModel, file, false, null);
+            await this.onModelLoaded?.(model as ViewerModel, file, false, null);
+            if (!this.isCurrentLoad(loadGeneration)) return;
 
             document.getElementById('drop-zone')?.classList.remove('show');
             document.getElementById('drop-zone')?.classList.remove('drag-over');
 
         } catch (error) {
+            if (!this.isCurrentLoad(loadGeneration)) return;
             console.error('Failed to load file:', error);
             const message = error instanceof Error ? error.message : String(error);
 
@@ -587,11 +620,17 @@ export class FileHandler {
      * Load single mesh file as model
      */
     async loadMeshAsModel(file: File, fileName: string): Promise<void> {
+        const loadGeneration = this.beginLoad(file);
         try {
             const meshObject = await ModelLoaderFactory.loadMeshFileDirect(file, fileName);
 
             if (!meshObject) {
                 throw new Error(window.i18n.t('cannotLoadMesh'));
+            }
+
+            if (!this.isCurrentLoad(loadGeneration)) {
+                disposeViewerModel({ threeObject: meshObject });
+                return;
             }
 
             // Ensure mesh materials support lighting and shadows
@@ -607,6 +646,7 @@ export class FileHandler {
                             side: oldMaterial.side,
                             shininess: 30
                         });
+                        oldMaterial.dispose();
                         if (child.material.map) {
                             child.material.map.colorSpace = THREE.SRGBColorSpace;
                         }
@@ -632,10 +672,15 @@ export class FileHandler {
 
             simpleMeshModel.links.set(meshLink.name, meshLink);
 
-            this.currentModelFile = file;
-            this.onModelLoaded?.(simpleMeshModel, file, true, null);
+            if (!this.isCurrentLoad(loadGeneration)) {
+                this.disposeStaleModel(simpleMeshModel);
+                return;
+            }
+
+            await this.onModelLoaded?.(simpleMeshModel, file, true, null);
 
         } catch (error) {
+            if (!this.isCurrentLoad(loadGeneration)) return;
             console.error('Failed to load mesh file:', error);
 
             const snapshot = document.getElementById('canvas-snapshot');

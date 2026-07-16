@@ -67,6 +67,8 @@ export class App {
 
     // VSCode file map
     vscodeFileMap: Map<string, VSCodeFileInfo>;
+    animationFrameId: number | null;
+    disposed: boolean;
 
     constructor() {
         // State
@@ -97,6 +99,8 @@ export class App {
 
         // VSCode file map
         this.vscodeFileMap = new Map();
+        this.animationFrameId = null;
+        this.disposed = false;
     }
 
     /**
@@ -159,8 +163,8 @@ export class App {
                 }
             };
 
-            this.fileHandler.onModelLoaded = (model: ViewerModel, file: File, isMesh = false, snapshot = null) => {
-                void this.handleModelLoaded(model, file, isMesh, snapshot);
+            this.fileHandler.onModelLoaded = async (model: ViewerModel, file: File, isMesh = false, snapshot = null) => {
+                await this.handleModelLoaded(model, file, isMesh, snapshot);
             };
 
             // Initialize joint controls UI
@@ -252,10 +256,11 @@ export class App {
                     this.state.setReloading(true);
                 }
 
-                this.fileHandler.currentModelFile = file;
-                await this.fileHandler.loadFile(file);
-
-                this.state.setReloading(false);
+                try {
+                    await this.fileHandler.loadFile(file);
+                } finally {
+                    this.state.setReloading(false);
+                }
             };
 
             // Save as callback
@@ -460,16 +465,33 @@ export class App {
     /**
      * Animation loop
      */
-    animate(): void {
-        requestAnimationFrame(() => this.animate());
+    animate(time = performance.now()): void {
+        if (this.disposed) return;
+        this.animationFrameId = requestAnimationFrame(nextTime => this.animate(nextTime));
         if (this.sceneManager) {
             this.sceneManager.update();
 
-            if (this.mujocoSimulationManager && this.mujocoSimulationManager.hasScene()) {
-                this.mujocoSimulationManager.update(performance.now());
+            if (this.mujocoSimulationManager?.isSimulationRunning()) {
+                this.mujocoSimulationManager.update(time);
+                this.sceneManager.redraw();
             }
 
-            this.sceneManager.render();
+            this.sceneManager.renderIfNeeded();
         }
+    }
+
+    dispose(): void {
+        if (this.disposed) return;
+        this.disposed = true;
+
+        if (this.animationFrameId !== null) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+
+        this.fileTreeView?.dispose();
+        this.usdViewerManager?.dispose();
+        this.mujocoSimulationManager?.clearScene();
+        this.sceneManager?.dispose();
     }
 }

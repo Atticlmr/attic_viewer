@@ -11,6 +11,7 @@ import { CoordinateAxesManager } from './CoordinateAxesManager.js';
 import { InertialVisualization } from './InertialVisualization.js';
 import { VisualizationManager } from './VisualizationManager.js';
 import type { SceneManager } from './SceneManager.js';
+import { disposeObject3D } from '../utils/ThreeDisposal.js';
 
 type NumericArrayLike = ArrayLike<number>;
 type MutableNumericArrayLike = { length: number; [index: number]: number };
@@ -1417,6 +1418,7 @@ export class MujocoSimulationManager {
         if (this.sceneManager.highlightManager) {
             this.sceneManager.highlightManager.clearHighlight();
         }
+        this.sceneManager.redraw();
     }
 
     /**
@@ -1440,6 +1442,7 @@ export class MujocoSimulationManager {
         if (this.sceneManager.dragControls) {
             this.sceneManager.dragControls.enabled = true;
         }
+        this.sceneManager.redraw();
     }
 
     /**
@@ -1461,16 +1464,16 @@ export class MujocoSimulationManager {
         // Release MuJoCo resources (compatible with old and new API)
         if (this.isOldAPI) {
             if (this.data) {
-                this.data.delete();
+                this.data.delete?.();
                 this.data = null;
             }
             if (this.model) {
-                this.model.delete();
+                this.model.delete?.();
                 this.model = null;
             }
         } else {
             if (this.simulation) {
-                this.simulation.free();
+                this.simulation.free?.();
                 this.simulation = null;
             }
             if (this.state) {
@@ -1512,6 +1515,7 @@ export class MujocoSimulationManager {
             if (this.mujocoRoot.parent) {
                 this.mujocoRoot.parent.remove(this.mujocoRoot);
             }
+            disposeObject3D(this.mujocoRoot, { disposeTextures: false });
             this.mujocoRoot = null;
         }
 
@@ -1540,6 +1544,7 @@ export class MujocoSimulationManager {
         this.isLoaded = false;
         this.isSimulating = false;
         this.params.paused = true;
+        this.sceneManager.redraw();
     }
 
     /**

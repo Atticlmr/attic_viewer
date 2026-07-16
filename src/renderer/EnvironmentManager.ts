@@ -3,6 +3,7 @@
  * Includes lighting, ground plane, coordinate system, etc.
  */
 import * as THREE from 'three';
+import { disposeObject3D } from '../utils/ThreeDisposal.js';
 
 interface EnvironmentLights {
     ambient?: THREE.HemisphereLight;
@@ -292,5 +293,35 @@ export class EnvironmentManager {
      */
     getDirectionalLight(): THREE.DirectionalLight | undefined {
         return this.lights.directional;
+    }
+
+    dispose(): void {
+        this.lights.directional?.shadow.map?.dispose();
+        this.pmremGenerator?.dispose();
+        this.pmremGenerator = null;
+
+        this.envMap?.dispose();
+        this.envMap = null;
+        this.scene.environment = null;
+
+        disposeObject3D(this.groundPlane);
+        disposeObject3D(this.referenceGrid);
+        disposeObject3D(this.globalAxes);
+
+        if (this.groundPlane?.parent) this.groundPlane.parent.remove(this.groundPlane);
+        if (this.referenceGrid?.parent) this.referenceGrid.parent.remove(this.referenceGrid);
+        if (this.globalAxes?.parent) this.globalAxes.parent.remove(this.globalAxes);
+
+        Object.values(this.lights).forEach(light => {
+            if (light?.parent) light.parent.remove(light);
+            if (light instanceof THREE.DirectionalLight && light.target.parent) {
+                light.target.parent.remove(light.target);
+            }
+        });
+
+        this.groundPlane = null;
+        this.referenceGrid = null;
+        this.globalAxes = null;
+        this.lights = {};
     }
 }

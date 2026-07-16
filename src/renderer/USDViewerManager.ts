@@ -56,6 +56,9 @@ export class USDViewerManager {
     async initialize(): Promise<void> {
         if (this.isReady) return;
         if (this.initializationPromise) return this.initializationPromise;
+        if (!window.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
+            throw new Error('USD requires cross-origin isolation. Reload the page or configure COOP/COEP response headers.');
+        }
 
         this.initializationPromise = new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
@@ -102,6 +105,7 @@ export class USDViewerManager {
      */
     handleMessage(event: MessageEvent<USDViewerPayload>): void {
         if (event.origin !== window.location.origin) return;
+        if (!this.iframe || event.source !== this.iframe.contentWindow) return;
 
         const data = event.data;
         if (!data || typeof data !== 'object') return;

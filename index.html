@@ -5,6 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="dark light">
     <title>Attic Viewer</title>
+    <script>
+        (function() {
+            if (!window.isSecureContext || !('serviceWorker' in navigator)) return;
+
+            const reloadKey = 'attic-viewer-coi-reload';
+            if (window.crossOriginIsolated) {
+                sessionStorage.removeItem(reloadKey);
+                return;
+            }
+
+            const workerUrl = new URL('./coi-serviceworker.js', window.location.href);
+            navigator.serviceWorker.register(workerUrl, { scope: './' }).then(function(registration) {
+                registration.update();
+
+                const reloadOnce = function() {
+                    if (sessionStorage.getItem(reloadKey)) return;
+                    sessionStorage.setItem(reloadKey, '1');
+                    window.location.reload();
+                };
+
+                if (navigator.serviceWorker.controller) {
+                    reloadOnce();
+                } else {
+                    navigator.serviceWorker.addEventListener('controllerchange', reloadOnce, { once: true });
+                }
+            }).catch(function(error) {
+                console.error('Failed to enable cross-origin isolation:', error);
+            });
+        })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg">
     <link rel="alternate icon" href="./favicon.svg">
     <!-- Blocking script: Set theme before rendering any content -->
